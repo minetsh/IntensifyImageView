@@ -37,11 +37,6 @@ public class IntensifyImageManager {
 
 //    private volatile IntensifyImage.IntensifyInfo mInfo;
 
-    /**
-     * 图片的区域
-     */
-    private Rect mImageRectangle;
-
     private IntensifyInfo mInfo;
 
     private HandlerThread mHandlerThread;
@@ -59,7 +54,6 @@ public class IntensifyImageManager {
 
     private static final int BLOCK_SIZE = 200;
 
-    private static final int MSG_IMAGE_LOAD = 0;
     private static final int MSG_IMAGE_INIT = 1;
     private static final int MSG_IMAGE_BLOCK_LOAD = 2;
     private static final int MSG_IMAGE_HOMING = 3;
@@ -71,6 +65,7 @@ public class IntensifyImageManager {
         mHandlerThread = new HandlerThread(TAG);
         mHandlerThread.start();
         mHandler = new IntensifyImageHandler(mHandlerThread.getLooper());
+        Logger.i(TAG, "Constructor: " + mDisplayMetrics);
     }
 
 
@@ -107,20 +102,42 @@ public class IntensifyImageManager {
         release();
         mImage = new Image(decoder);
         mHandler.removeCallbacksAndMessages(null);
-        mHandler.sendEmptyMessage(MSG_IMAGE_LOAD);
+        mHandler.sendEmptyMessage(MSG_IMAGE_INIT);
     }
 
     private void initialize() {
-        if (mImage == null || mImage.mImageDecoder == null) return;
-        // 获取一个合适的inSampleSize
-        int sampleSize = getSampleSize(2f * mImage.mImageWidth / mDisplayMetrics.widthPixels
-                * mImage.mImageHeight / mDisplayMetrics.heightPixels);
-        mImage.mImageCacheScale = sampleSize;
-        Options options = new Options();
-        options.inSampleSize = sampleSize;
-        mImageRectangle = new Rect(0, 0, mImage.mImageWidth, mImage.mImageHeight);
-        mImage.mImageCache = mImage.mImageRegion.decodeRegion(mImageRectangle, options);
-        initScaleType();
+        try {
+            mImage.mImageRegion = mImage.mImageDecoder.newRegionDecoder();
+            mImage.mImageWidth = mImage.mImageRegion.getWidth();
+            mImage.mImageHeight = mImage.mImageRegion.getHeight();
+            mImage.mImageOriginalRect = new Rect(0, 0, mImage.mImageWidth, mImage.mImageHeight);
+            mInfo.mImageRect = new Rect(0, 0, mImage.mImageWidth, mImage.mImageHeight);
+            center(mInfo.mImageRect, mInfo.mVisibleRect);
+            mInfo.mScale.setScale(1f);
+
+            int sampleSize = 1;
+            // 获取一个合适的inSampleSize
+            if (mInfo.mVisibleRect.isEmpty()) {
+                sampleSize = getSampleSize(1f * mImage.mImageWidth / mDisplayMetrics.widthPixels
+                        * mImage.mImageHeight / mDisplayMetrics.heightPixels);
+            } else {
+                sampleSize = getSampleSize(
+                        Math.max(1f * mImage.mImageWidth / mInfo.mVisibleRect.width(),
+                                1f * mImage.mImageHeight / mInfo.mVisibleRect.height()));
+            }
+
+            mImage.mImageCacheScale = sampleSize;
+            Options options = new Options();
+            options.inSampleSize = sampleSize;
+            mImage.mImageCache = mImage.mImageRegion.decodeRegion(mImage.mImageOriginalRect, options);
+
+            Logger.i(TAG, "Initialize: Width=%d, Height=%d, SampleSize=%d", mImage.mImageWidth,
+                    mImage.mImageHeight, sampleSize);
+
+            initScaleType();
+        } catch (IOException e) {
+            Logger.w(TAG, e);
+        }
     }
 
     private void initScaleType() {
@@ -128,8 +145,11 @@ public class IntensifyImageManager {
         // 是否为垂直型图片
         boolean vertical = Double.compare(mImage.mImageHeight * visibleRect.width(),
                 mImage.mImageWidth * visibleRect.height()) > 0;
+        Logger.i(TAG, "InitScaleType: IsVerticalType=" + vertical);
+        mInfo.mImageRect.set(mImage.mImageOriginalRect);
         switch (mScaleType) {
             case FIT_CENTER:
+                Logger.i(TAG, "InitScaleType: FIT_CENTER");
                 if (vertical) {
                     // 长图
                     mBaseScale = 1f * visibleRect.height() / mImage.mImageHeight;
@@ -145,19 +165,47 @@ public class IntensifyImageManager {
                 }
                 break;
             case FIT_AUTO:
+                Logger.i(TAG, "InitScaleType: FIT_AUTO");
                 if (vertical) {
-                    mBaseScale = 1f * visibleRect.width() / mImage.mImageWidth;
+                    mBaseScale = 1f * visibleRect.height() / mImage.mImageHeight;
                     mInfo.mScale.setScale(mBaseScale);
+                    mInfo.mImageRect.offsetTo(mInfo.mImageRect.left, 0);
                     centerHorizontal(mInfo.mImageRect, visibleRect.width());
                     mInfo.mScale.focus.set(visibleRect.centerX(), 0);
                 } else {
-                    mBaseScale = 1f * visibleRect.height() / mImage.mImageHeight;
+                    mBaseScale = 1f * visibleRect.width() / mImage.mImageWidth;
                     mInfo.mScale.setScale(mBaseScale);
-                    centerVertical(mInfo.mImageRect, visibleRect.height());
+                    center(mInfo.mImageRect, visibleRect);
                     mInfo.mScale.focus.set(visibleRect.centerX(), visibleRect.centerY());
                 }
                 break;
         }
+        Logger.i(TAG, "InitScaleType: ImageRect=" + mInfo.mImageRect
+                + ", FocusPoint=" + mInfo.mScale.focus + ", BaseScale=" + mBaseScale);
+    }
+
+    private boolean loadImageBlock(BlockInfo info) {
+        ImageCache imageCache = mImage.mCurrentImageCache;
+        if (info == null || imageCache == null || imageCache.mScale != info.inSampleSize) {
+            return false;
+        }
+        try {
+            if (!imageCache.mCaches.containsKey(info.position)) {
+                Options options = new Options();
+                options.inSampleSize = info.inSampleSize;
+                Rect rect = blockRect(info.position.x, info.position.y, BLOCK_SIZE);
+//                boolean intersect = rect.intersect(mImage.mImageRect);
+                Bitmap bitmap = mImage.mImageRegion.decodeRegion(rect, options);
+                if (bitmap != null) {
+                    imageCache.mCaches.put(info.position, bitmap);
+                    Logger.i(TAG, "Block: " + rect + ", SampleSize=" + info.inSampleSize);
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, e);
+        }
+        return false;
     }
 
     /**
@@ -219,6 +267,10 @@ public class IntensifyImageManager {
     private static void offsetHorizontal(Rect rect, int offset) {
         rect.left += offset;
         rect.right += offset;
+    }
+
+    private static void center(Rect rect, Rect frame) {
+        center(rect, frame.width(), frame.height());
     }
 
     private static void center(Rect rect, int width, int height) {
@@ -303,12 +355,8 @@ public class IntensifyImageManager {
         int cacheSimpleSize = mImage.mImageCacheScale;
 
         if (mImage.mImageCache == null) {
-            if (!isImageLoaded() && !mHandler.hasMessages(MSG_IMAGE_LOAD)) {
-                mHandler.sendEmptyMessage(MSG_IMAGE_LOAD);
-            } else if (!mHandler.hasMessages(MSG_IMAGE_INIT)) {
-                mHandler.sendEmptyMessage(MSG_IMAGE_INIT);
-            }
-            return new ArrayList<>(0);
+            mHandler.sendEmptyMessage(MSG_IMAGE_INIT);
+            return drawables;
         } else {
             if (Float.compare(preScale, curScale) != 0) {
                 scale(mInfo.mImageRect, curScale / preScale, mInfo.mScale.focus);
@@ -493,7 +541,7 @@ public class IntensifyImageManager {
         volatile ImageDrawable mCacheDrawable;
         volatile int mImageCacheScale;
 
-        volatile Rect mImageRect;
+        volatile Rect mImageOriginalRect;
         volatile int mImageWidth;
         volatile int mImageHeight;
     }
@@ -594,53 +642,22 @@ public class IntensifyImageManager {
         @Override
         public void handleMessage(Message msg) {
             switch (msg.what) {
-                case MSG_IMAGE_LOAD:
-                    try {
-                        mImage.mImageRegion = mImage.mImageDecoder.newRegionDecoder();
-                        mImage.mImageWidth = mImage.mImageRegion.getWidth();
-                        mImage.mImageHeight = mImage.mImageRegion.getHeight();
-                        mImage.mImageRect = new Rect(0, 0, mImage.mImageWidth, mImage.mImageHeight);
-                        if (mCallback != null)
-                            mCallback.onImageLoadFinished(mImage.mImageWidth, mImage.mImageHeight);
-                        requestInvalidate();
-                    } catch (IOException e) {
-                        Log.w(TAG, e);
-                    }
-                    break;
                 case MSG_IMAGE_INIT:
-                    try {
-                        initialize();
-                        if (mCallback != null) mCallback.omImageInitFinished(mBaseScale);
-                        requestInvalidate();
-                    } catch (Exception e) {
-                        Log.w(TAG, e);
-                    }
+                    Logger.d(TAG, "MSG_IMAGE_INIT");
+                    initialize();
+                    requestInvalidate();
                     break;
                 case MSG_IMAGE_BLOCK_LOAD:
+                    Logger.d(TAG, "MSG_IMAGE_BLOCK_LOAD");
                     if (msg.obj instanceof BlockInfo) {
                         BlockInfo info = (BlockInfo) msg.obj;
-                        ImageCache imageCache = mImage.mCurrentImageCache;
-                        if (imageCache == null || imageCache.mScale != info.inSampleSize) {
-                            return;
-                        }
-                        try {
-                            if (!imageCache.mCaches.containsKey(info.position)) {
-                                Options options = new Options();
-                                options.inSampleSize = info.inSampleSize;
-                                Rect rect = blockRect(info.position.x, info.position.y, BLOCK_SIZE);
-//                                boolean intersect = rect.intersect(mImage.mImageRect);
-                                Bitmap bitmap = mImage.mImageRegion.decodeRegion(rect, options);
-                                if (bitmap != null) {
-                                    imageCache.mCaches.put(info.position, bitmap);
-                                    requestInvalidate();
-                                }
-                            }
-                        } catch (Exception e) {
-                            Log.w(TAG, e);
+                        if (loadImageBlock(info)) {
+                            requestInvalidate();
                         }
                     }
                     break;
                 case MSG_IMAGE_HOMING:
+                    Logger.d(TAG, "MSG_IMAGE_HOMING");
                     if (homing()) requestInvalidate();
                     break;
             }

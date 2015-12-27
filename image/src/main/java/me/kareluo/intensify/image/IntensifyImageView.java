@@ -2,7 +2,9 @@ package me.kareluo.intensify.image;
 
 import android.animation.ValueAnimator;
 import android.content.Context;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.os.Looper;
@@ -22,6 +24,7 @@ import me.kareluo.intensify.image.IntensifyImageManager.ImageDrawable;
  */
 public class IntensifyImageView extends IntensifyView implements IntensifyImage,
         IntensifyImageManager.Callback {
+    private static final boolean DEBUG = true;
     private static final String TAG = "IntensifyImageView";
 
 //    private volatile Scale mScale = new Scale(1f, 0, 0);
@@ -81,6 +84,9 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
     private void initialize(Context context, AttributeSet attrs, int defStyleAttr) {
         mIntensifyManager = new IntensifyImageManager(getResources().getDisplayMetrics(), mInfo, this);
         mPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        mPaint.setColor(Color.GREEN);
+        mPaint.setStrokeWidth(1f);
+        mPaint.setStyle(Paint.Style.STROKE);
         mAttacher = new IntensifyViewAttacher<>(this);
     }
 
@@ -135,14 +141,12 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
 
     @Override
     protected void onDraw(Canvas canvas) {
-        if (!mIntensifyManager.isImageLoaded() || !getLocalVisibleRect(mInfo.mVisibleRect)) {
-            // 如果没有加载图片返回
-            return;
-        }
+        getDrawingRect(mInfo.mVisibleRect);
         int save = canvas.save();
         List<ImageDrawable> drawables = mIntensifyManager.getImageDrawables();
         for (ImageDrawable drawable : drawables) {
             canvas.drawBitmap(drawable.mBitmap, drawable.mSrc, drawable.mDst, mPaint);
+            if (DEBUG) canvas.drawRect(drawable.mDst, mPaint);
         }
         canvas.restoreToCount(save);
     }
@@ -250,6 +254,7 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
 
     @Override
     public void nextStepScale(int focusX, int focusY) {
+        if (mScaleSteps.isEmpty()) return;
         float scale = mInfo.mScale.curScale;
         int step = 0;
         while (scale >= mScaleSteps.get(step)) {
