@@ -1,5 +1,7 @@
 package me.kareluo.intensify.image;
 
+import android.animation.RectEvaluator;
+import android.animation.ValueAnimator;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory.Options;
 import android.graphics.BitmapRegionDecoder;
@@ -12,9 +14,11 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.Message;
+import android.support.annotation.NonNull;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.SparseArray;
+import android.view.animation.DecelerateInterpolator;
 
 import java.io.File;
 import java.io.IOException;
@@ -23,12 +27,13 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
-import static me.kareluo.intensify.image.IntensifyImage.*;
+import static me.kareluo.intensify.image.IntensifyImage.IntensifyInfo;
+import static me.kareluo.intensify.image.IntensifyImage.ScaleType;
 
 /**
  * Created by felix on 15/12/17.
  */
-public class IntensifyImageManager {
+public class IntensifyImageManager implements ValueAnimator.AnimatorUpdateListener {
     private static final String TAG = "IntensifyImageManager";
 
     private DisplayMetrics mDisplayMetrics;
@@ -46,6 +51,10 @@ public class IntensifyImageManager {
     private Image mImage;
 
     private float mBaseScale = 1f;
+
+    private ValueAnimator mZoomHomeAnimator;
+
+    private Rect mStartRect = new Rect(), mEndRect = new Rect();
 
     /**
      * 图片的初始的缩放类型
@@ -66,8 +75,12 @@ public class IntensifyImageManager {
         mHandlerThread.start();
         mHandler = new IntensifyImageHandler(mHandlerThread.getLooper());
         Logger.i(TAG, "Constructor: " + mDisplayMetrics);
-    }
 
+        mZoomHomeAnimator = ValueAnimator.ofFloat(0, 1f);
+        mZoomHomeAnimator.setDuration(IntensifyImage.DURATION_ZOOM_HOME);
+        mZoomHomeAnimator.setInterpolator(new DecelerateInterpolator());
+        mZoomHomeAnimator.addUpdateListener(this);
+    }
 
     public void onAttached() {
         if (mImage != null && mImage.mImageDecoder != null) {
@@ -257,6 +270,61 @@ public class IntensifyImageManager {
         }
 
         return true;
+    }
+
+    private void zoomHoming() {
+        if (mInfo.mImageRect.contains(mInfo.mVisibleRect)) return;
+
+        final Rect reuseRect = new Rect();
+        mStartRect.set(mInfo.mImageRect);
+        mEndRect.set(mInfo.mImageRect);
+        Rect vr = mInfo.mVisibleRect;
+
+        if (mEndRect.height() < vr.height()) {
+            centerVertical(mEndRect, vr.height());
+        } else {
+            if (mEndRect.top > vr.top) {
+                offsetVertical(mEndRect, vr.top - mEndRect.top);
+            } else if (mEndRect.bottom < vr.bottom) {
+                offsetVertical(mEndRect, vr.bottom - mEndRect.bottom);
+            }
+        }
+
+        if (mEndRect.width() < vr.width()) {
+            centerHorizontal(mEndRect, vr.width());
+        } else {
+            if (mEndRect.left > vr.left) {
+                offsetHorizontal(mEndRect, vr.left - mEndRect.left);
+            } else if (mEndRect.right < vr.right) {
+                offsetHorizontal(mEndRect, vr.right - mEndRect.right);
+            }
+        }
+
+        mZoomHomeAnimator.start();
+    }
+
+    @Override
+    public void onAnimationUpdate(ValueAnimator animation) {
+        Float value = (Float) animation.getAnimatedValue();
+        evaluate(value, mStartRect, mEndRect, mInfo.mImageRect);
+        requestInvalidate();
+    }
+
+    public static Rect evaluate(float fraction, Rect startValue, Rect endValue, @NonNull Rect reuseRect) {
+        int left = startValue.left + (int) ((endValue.left - startValue.left) * fraction);
+        int top = startValue.top + (int) ((endValue.top - startValue.top) * fraction);
+        int right = startValue.right + (int) ((endValue.right - startValue.right) * fraction);
+        int bottom = startValue.bottom + (int) ((endValue.bottom - startValue.bottom) * fraction);
+        reuseRect.set(left, top, right, bottom);
+        return reuseRect;
+    }
+
+    public static Rect evaluate(float fraction, Rect startValue, Rect endValue) {
+        int left = startValue.left + (int) ((endValue.left - startValue.left) * fraction);
+        int top = startValue.top + (int) ((endValue.top - startValue.top) * fraction);
+        int right = startValue.right + (int) ((endValue.right - startValue.right) * fraction);
+        int bottom = startValue.bottom + (int) ((endValue.bottom - startValue.bottom) * fraction);
+        return new Rect(left, top, right, bottom);
     }
 
     private static void offsetVertical(Rect rect, int offset) {
@@ -526,6 +594,7 @@ public class IntensifyImageManager {
         mCallback = callback;
     }
 
+
     private static class Image {
         private Image(ImageDecoder decoder) {
             mImageDecoder = decoder;
@@ -658,7 +727,8 @@ public class IntensifyImageManager {
                     break;
                 case MSG_IMAGE_HOMING:
                     Logger.d(TAG, "MSG_IMAGE_HOMING");
-                    if (homing()) requestInvalidate();
+//                    if (homing()) requestInvalidate();
+                    zoomHoming();
                     break;
             }
         }

@@ -13,6 +13,8 @@ public interface IntensifyImage {
 
     int FLING_DURATION = 400;
 
+    int DURATION_ZOOM_HOME = 400;
+
     void setImage(String path);
 
     void setImage(File file);
