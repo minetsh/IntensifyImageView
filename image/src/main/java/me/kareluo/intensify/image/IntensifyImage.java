@@ -11,9 +11,11 @@ import java.io.InputStream;
  */
 public interface IntensifyImage {
 
-    int FLING_DURATION = 400;
+    int DURATION_FLING = 400;
 
     int DURATION_ZOOM_HOME = 400;
+
+    int DURATION_ZOOM = 300;
 
     void setImage(String path);
 
@@ -40,6 +42,8 @@ public interface IntensifyImage {
     void fling(float velocityX, float velocityY);
 
     void nextStepScale(int focusX, int focusY);
+
+    void onTouch(float x, float y);
 
     void home();
 

@@ -1,16 +1,18 @@
 package me.kareluo.intensify.image;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.content.Context;
-import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.util.AttributeSet;
-import android.view.animation.DecelerateInterpolator;
+import android.widget.OverScroller;
 
 import java.io.File;
 import java.io.InputStream;
@@ -41,6 +43,12 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
 
     private Paint mPaint;
 
+    private float mVelocityX = 0f, mVelocityY = 0f;
+
+    private ValueAnimator mFlingAnimator;
+
+    private FlingAnimatorAdapter mFlingAdapter;
+
     private List<Float> mScaleSteps = new ArrayList<>();
 
     private IntensifyViewAttacher<IntensifyImageView> mAttacher;
@@ -48,6 +56,12 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
     private float mMinimumScale = 0.01f;
 
     private float mMaximumScale = 1000f;
+
+    private RectF mImageRect = new RectF();
+
+    private Rect mDrawingRect = new Rect();
+
+    private OverScroller mScroller;
 
     // Fling摩擦系数
     private float FRICTION_RATIO = 6f;
@@ -88,6 +102,7 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
         mPaint.setStrokeWidth(1f);
         mPaint.setStyle(Paint.Style.STROKE);
         mAttacher = new IntensifyViewAttacher<>(this);
+        mScroller = new OverScroller(context);
     }
 
     @Override
@@ -142,8 +157,11 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
     @Override
     protected void onDraw(Canvas canvas) {
         getDrawingRect(mInfo.mVisibleRect);
+        getDrawingRect(mDrawingRect);
         int save = canvas.save();
+//        List<ImageDrawable> drawables1 = mIntensifyManager.getImageDrawables(mDrawingRect);
         List<ImageDrawable> drawables = mIntensifyManager.getImageDrawables();
+
         for (ImageDrawable drawable : drawables) {
             canvas.drawBitmap(drawable.mBitmap, drawable.mSrc, drawable.mDst, mPaint);
             if (DEBUG) canvas.drawRect(drawable.mDst, mPaint);
@@ -214,42 +232,71 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
     }
 
     @Override
-    public void fling(final float velocityX, final float velocityY) {
-        if (Math.abs(velocityY) > Math.abs(velocityX)) {
-            ValueAnimator animator = ValueAnimator.ofFloat(velocityY / FRICTION_RATIO, 0);
-            animator.setInterpolator(new DecelerateInterpolator());
-            animator.setDuration(FLING_DURATION);
-            animator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
-                float offset = velocityY / FRICTION_RATIO;
+    public void getDrawingRect(Rect outRect) {
+        super.getDrawingRect(outRect);
+    }
 
-                @Override
-                public void onAnimationUpdate(ValueAnimator animation) {
-                    Float value = (Float) animation.getAnimatedValue();
-                    if (value != null) {
-                        scroll(0, value - offset);
-                        offset = value;
-                    }
-                }
-            });
-            animator.start();
-        } else {
-            ValueAnimator animator = ValueAnimator.ofFloat(velocityX / FRICTION_RATIO, 0);
-            animator.setInterpolator(new DecelerateInterpolator());
-            animator.setDuration(FLING_DURATION);
-            animator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
-                float offset = velocityX / FRICTION_RATIO;
+    @Override
+    public void scrollBy(int x, int y) {
+        super.scrollBy(x, y);
+    }
 
-                @Override
-                public void onAnimationUpdate(ValueAnimator animation) {
-                    Float value = (Float) animation.getAnimatedValue();
-                    if (value != null) {
-                        scroll(value - offset, 0);
-                        offset = value;
-                    }
-                }
-            });
-            animator.start();
+    @Override
+    public void scrollTo(int x, int y) {
+        super.scrollTo(x, y);
+    }
+
+    @Override
+    public void computeScroll() {
+        if (mScroller.computeScrollOffset()) {
+            scrollTo(mScroller.getCurrX(), mScroller.getCurrY());
+            postInvalidate();
         }
+    }
+
+    @Override
+    public void fling(final float velocityX, final float velocityY) {
+        Logger.d(TAG, "Fling: velocityX=" + velocityX + ", velocityY=" + velocityY);
+
+        mScroller.fling(getScrollX(), getScrollY(), -Math.round(velocityX), -Math.round(velocityY),
+                0, Math.round(mImageRect.right - getWidth()), 0, Math.round(mImageRect.bottom - getHeight()));
+        postInvalidate();
+
+//        if (Math.abs(velocityY) > Math.abs(velocityX)) {
+//            ValueAnimator animator = ValueAnimator.ofFloat(velocityY / FRICTION_RATIO, 0);
+//            animator.setInterpolator(new DecelerateInterpolator());
+//            animator.setDuration(DURATION_FLING);
+//            animator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+//                float offset = velocityY / FRICTION_RATIO;
+//
+//                @Override
+//                public void onAnimationUpdate(ValueAnimator animation) {
+//                    Float value = (Float) animation.getAnimatedValue();
+//                    if (value != null) {
+//                        scroll(0, value - offset);
+//                        offset = value;
+//                    }
+//                }
+//            });
+//            animator.start();
+//        } else {
+//            ValueAnimator animator = ValueAnimator.ofFloat(velocityX / FRICTION_RATIO, 0);
+//            animator.setInterpolator(new DecelerateInterpolator());
+//            animator.setDuration(DURATION_FLING);
+//            animator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+//                float offset = velocityX / FRICTION_RATIO;
+//
+//                @Override
+//                public void onAnimationUpdate(ValueAnimator animation) {
+//                    Float value = (Float) animation.getAnimatedValue();
+//                    if (value != null) {
+//                        scroll(value - offset, 0);
+//                        offset = value;
+//                    }
+//                }
+//            });
+//            animator.start();
+//        }
     }
 
     @Override
@@ -262,6 +309,11 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
             if (step == 0) break;
         }
         setScale(mScaleSteps.get(step), focusX, focusY);
+    }
+
+    @Override
+    public void onTouch(float x, float y) {
+
     }
 
     @Override
@@ -291,7 +343,7 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
 
     @Override
     public void onImageLoadFinished(int width, int height) {
-
+        Logger.d(TAG, "Load finished: width=" + width + ",height=" + height);
     }
 
     @Override
@@ -311,6 +363,50 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
     @Override
     public void onRequestInvalidate() {
         requestInvalidate();
+    }
+
+    @Override
+    public void onError(String message, Exception e) {
+        // TODO: 错误处理
+    }
+
+    private class FlingAnimatorAdapter extends AnimatorListenerAdapter
+            implements ValueAnimator.AnimatorUpdateListener {
+
+        @Override
+        public void onAnimationEnd(Animator animation) {
+            Logger.d(TAG, "ANIMATION END");
+        }
+
+        @Override
+        public void onAnimationCancel(Animator animation) {
+            Logger.d(TAG, "ANIMATION CANCEL");
+        }
+
+        @Override
+        public void onAnimationRepeat(Animator animation) {
+            Logger.d(TAG, "ANIMATION REPEAT");
+        }
+
+        @Override
+        public void onAnimationStart(Animator animation) {
+            Logger.d(TAG, "ANIMATION START");
+        }
+
+        @Override
+        public void onAnimationPause(Animator animation) {
+            Logger.d(TAG, "ANIMATION PAUSE");
+        }
+
+        @Override
+        public void onAnimationResume(Animator animation) {
+            Logger.d(TAG, "ANIMATION RESUME");
+        }
+
+        @Override
+        public void onAnimationUpdate(ValueAnimator animation) {
+            Logger.d(TAG, "ANIMATION UPDATE");
+        }
     }
 
     public interface IntensifyImageLoadListener {

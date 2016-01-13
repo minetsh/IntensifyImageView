@@ -1,7 +1,10 @@
 package me.kareluo.intensify.image;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
 import android.animation.RectEvaluator;
 import android.animation.ValueAnimator;
+import android.animation.ValueAnimator.AnimatorUpdateListener;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory.Options;
 import android.graphics.BitmapRegionDecoder;
@@ -17,6 +20,7 @@ import android.os.Message;
 import android.support.annotation.NonNull;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.util.LruCache;
 import android.util.SparseArray;
 import android.view.animation.DecelerateInterpolator;
 
@@ -24,16 +28,20 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 
+import me.kareluo.intensify.image.IntensifyImage.Scale;
+
+import static me.kareluo.intensify.image.IntensifyImage.DURATION_ZOOM_HOME;
 import static me.kareluo.intensify.image.IntensifyImage.IntensifyInfo;
 import static me.kareluo.intensify.image.IntensifyImage.ScaleType;
 
 /**
  * Created by felix on 15/12/17.
  */
-public class IntensifyImageManager implements ValueAnimator.AnimatorUpdateListener {
+public class IntensifyImageManager {
     private static final String TAG = "IntensifyImageManager";
 
     private DisplayMetrics mDisplayMetrics;
@@ -54,6 +62,18 @@ public class IntensifyImageManager implements ValueAnimator.AnimatorUpdateListen
 
     private ValueAnimator mZoomHomeAnimator;
 
+    private ZoomAnimatorAdapter mZoomAdapter;
+
+    private ValueAnimator mZoomAnimator;
+
+    private ValueAnimator mFlingAnimator;
+
+    private FlingAnimatorAdapter mFlingAdapter;
+
+    private ValueAnimator mAnimation;
+
+    private RectF mImageArea = new RectF();
+
     private Rect mStartRect = new Rect(), mEndRect = new Rect();
 
     /**
@@ -61,13 +81,24 @@ public class IntensifyImageManager implements ValueAnimator.AnimatorUpdateListen
      */
     private ScaleType mScaleType = ScaleType.FIT_AUTO;
 
+    private State mState = State.NONE;
+
+    // Fling摩擦系数
+    private float FRICTION_RATIO = 6f;
+
     private static final int BLOCK_SIZE = 200;
 
+    private static final int MSG_IMAGE_LOAD = 0;
     private static final int MSG_IMAGE_INIT = 1;
     private static final int MSG_IMAGE_BLOCK_LOAD = 2;
     private static final int MSG_IMAGE_HOMING = 3;
 
-    public IntensifyImageManager(DisplayMetrics metrics, IntensifyInfo info, Callback callback) {
+
+    private enum State {
+        NONE, LOAD, INIT
+    }
+
+    public IntensifyImageManager(DisplayMetrics metrics, IntensifyInfo info, @NonNull Callback callback) {
         mDisplayMetrics = metrics;
         mCallback = callback;
         mInfo = info;
@@ -76,10 +107,23 @@ public class IntensifyImageManager implements ValueAnimator.AnimatorUpdateListen
         mHandler = new IntensifyImageHandler(mHandlerThread.getLooper());
         Logger.i(TAG, "Constructor: " + mDisplayMetrics);
 
+        mZoomAdapter = new ZoomAnimatorAdapter();
         mZoomHomeAnimator = ValueAnimator.ofFloat(0, 1f);
         mZoomHomeAnimator.setDuration(IntensifyImage.DURATION_ZOOM_HOME);
         mZoomHomeAnimator.setInterpolator(new DecelerateInterpolator());
-        mZoomHomeAnimator.addUpdateListener(this);
+        mZoomHomeAnimator.addUpdateListener(mZoomAdapter);
+
+        mZoomAnimator = ValueAnimator.ofFloat(0, 1f);
+        mZoomAnimator.setDuration(IntensifyImage.DURATION_ZOOM);
+        mZoomAnimator.setInterpolator(new DecelerateInterpolator());
+        mZoomAnimator.addUpdateListener(mZoomAdapter);
+
+        mFlingAdapter = new FlingAnimatorAdapter();
+        mFlingAnimator = ValueAnimator.ofFloat(0, 1f);
+        mFlingAnimator.setDuration(IntensifyImage.DURATION_FLING);
+        mFlingAnimator.setInterpolator(new DecelerateInterpolator());
+        mFlingAnimator.addUpdateListener(mFlingAdapter);
+        mFlingAnimator.addListener(mFlingAdapter);
     }
 
     public void onAttached() {
@@ -115,42 +159,54 @@ public class IntensifyImageManager implements ValueAnimator.AnimatorUpdateListen
         release();
         mImage = new Image(decoder);
         mHandler.removeCallbacksAndMessages(null);
+        mHandler.sendEmptyMessage(MSG_IMAGE_LOAD);
         mHandler.sendEmptyMessage(MSG_IMAGE_INIT);
     }
 
-    private void initialize() {
+    private synchronized void load() {
         try {
             mImage.mImageRegion = mImage.mImageDecoder.newRegionDecoder();
             mImage.mImageWidth = mImage.mImageRegion.getWidth();
             mImage.mImageHeight = mImage.mImageRegion.getHeight();
             mImage.mImageOriginalRect = new Rect(0, 0, mImage.mImageWidth, mImage.mImageHeight);
-            mInfo.mImageRect = new Rect(0, 0, mImage.mImageWidth, mImage.mImageHeight);
-            center(mInfo.mImageRect, mInfo.mVisibleRect);
-            mInfo.mScale.setScale(1f);
-
-            int sampleSize = 1;
-            // 获取一个合适的inSampleSize
-            if (mInfo.mVisibleRect.isEmpty()) {
-                sampleSize = getSampleSize(1f * mImage.mImageWidth / mDisplayMetrics.widthPixels
-                        * mImage.mImageHeight / mDisplayMetrics.heightPixels);
-            } else {
-                sampleSize = getSampleSize(
-                        Math.max(1f * mImage.mImageWidth / mInfo.mVisibleRect.width(),
-                                1f * mImage.mImageHeight / mInfo.mVisibleRect.height()));
-            }
-
-            mImage.mImageCacheScale = sampleSize;
-            Options options = new Options();
-            options.inSampleSize = sampleSize;
-            mImage.mImageCache = mImage.mImageRegion.decodeRegion(mImage.mImageOriginalRect, options);
-
-            Logger.i(TAG, "Initialize: Width=%d, Height=%d, SampleSize=%d", mImage.mImageWidth,
-                    mImage.mImageHeight, sampleSize);
-
-            initScaleType();
+            mImageArea = new RectF(mImage.mImageOriginalRect);
+            mState = State.LOAD;
+            mCallback.onImageLoadFinished(mImage.mImageWidth, mImage.mImageHeight);
         } catch (IOException e) {
             Logger.w(TAG, e);
+            mCallback.onError("LOAD ERROR", e);
         }
+    }
+
+    private synchronized void initialize() {
+        mImageArea.set(mImage.mImageOriginalRect);
+        mInfo.mImageRect = new Rect(0, 0, mImage.mImageWidth, mImage.mImageHeight);
+
+        center(mInfo.mImageRect, mInfo.mVisibleRect);
+
+
+        mInfo.mScale.setScale(1f);
+
+        int sampleSize = 1;
+        // 获取一个合适的inSampleSize
+        if (mInfo.mVisibleRect.isEmpty()) {
+            sampleSize = getSampleSize(1f * mImage.mImageWidth / mDisplayMetrics.widthPixels
+                    * mImage.mImageHeight / mDisplayMetrics.heightPixels);
+        } else {
+            sampleSize = getSampleSize(
+                    Math.max(1f * mImage.mImageWidth / mInfo.mVisibleRect.width(),
+                            1f * mImage.mImageHeight / mInfo.mVisibleRect.height()));
+        }
+
+        mImage.mImageCacheScale = sampleSize;
+        Options options = new Options();
+        options.inSampleSize = sampleSize;
+        mImage.mImageCache = mImage.mImageRegion.decodeRegion(mImage.mImageOriginalRect, options);
+
+        Logger.i(TAG, "Initialize: Width=%d, Height=%d, SampleSize=%d", mImage.mImageWidth,
+                mImage.mImageHeight, sampleSize);
+
+        initScaleType();
     }
 
     private void initScaleType() {
@@ -303,13 +359,6 @@ public class IntensifyImageManager implements ValueAnimator.AnimatorUpdateListen
         mZoomHomeAnimator.start();
     }
 
-    @Override
-    public void onAnimationUpdate(ValueAnimator animation) {
-        Float value = (Float) animation.getAnimatedValue();
-        evaluate(value, mStartRect, mEndRect, mInfo.mImageRect);
-        requestInvalidate();
-    }
-
     public static Rect evaluate(float fraction, Rect startValue, Rect endValue, @NonNull Rect reuseRect) {
         int left = startValue.left + (int) ((endValue.left - startValue.left) * fraction);
         int top = startValue.top + (int) ((endValue.top - startValue.top) * fraction);
@@ -402,6 +451,37 @@ public class IntensifyImageManager implements ValueAnimator.AnimatorUpdateListen
     private void requestInvalidate() {
         if (mCallback != null) {
             mCallback.onRequestInvalidate();
+        }
+    }
+
+    public List<ImageDrawable> getImageDrawables(@NonNull Rect drawingRect, @NonNull Scale scale) {
+        if (drawingRect.isEmpty() || isNeedPrepare(drawingRect)) return Collections.emptyList();
+
+
+        return Collections.emptyList();
+    }
+
+    public boolean isNeedPrepare(Rect drawingRect) {
+        switch (mState) {
+            case NONE:
+                sendMessage(MSG_IMAGE_LOAD);
+                return true;
+            case LOAD:
+                sendMessage(MSG_IMAGE_INIT, drawingRect);
+                return true;
+        }
+        return false;
+    }
+
+    private void sendMessage(int what) {
+        if (mHandler != null) {
+            mHandler.sendEmptyMessage(what);
+        }
+    }
+
+    private void sendMessage(int what, Object obj) {
+        if (mHandler != null) {
+            mHandler.obtainMessage(what, obj).sendToTarget();
         }
     }
 
@@ -594,6 +674,55 @@ public class IntensifyImageManager implements ValueAnimator.AnimatorUpdateListen
         mCallback = callback;
     }
 
+    private class ZoomAnimatorAdapter extends AnimatorListenerAdapter
+            implements AnimatorUpdateListener {
+
+        @Override
+        public void onAnimationUpdate(ValueAnimator animation) {
+            Float value = (Float) animation.getAnimatedValue();
+            evaluate(value, mStartRect, mEndRect, mInfo.mImageRect);
+            requestInvalidate();
+        }
+    }
+
+    private class FlingAnimatorAdapter extends AnimatorListenerAdapter
+            implements AnimatorUpdateListener {
+
+        @Override
+        public void onAnimationEnd(Animator animation) {
+            Logger.d(TAG, "ANIMATION END");
+        }
+
+        @Override
+        public void onAnimationCancel(Animator animation) {
+            Logger.d(TAG, "ANIMATION CANCEL");
+        }
+
+        @Override
+        public void onAnimationRepeat(Animator animation) {
+            Logger.d(TAG, "ANIMATION REPEAT");
+        }
+
+        @Override
+        public void onAnimationStart(Animator animation) {
+            Logger.d(TAG, "ANIMATION START");
+        }
+
+        @Override
+        public void onAnimationPause(Animator animation) {
+            Logger.d(TAG, "ANIMATION PAUSE");
+        }
+
+        @Override
+        public void onAnimationResume(Animator animation) {
+            Logger.d(TAG, "ANIMATION RESUME");
+        }
+
+        @Override
+        public void onAnimationUpdate(ValueAnimator animation) {
+            Logger.d(TAG, "ANIMATION UPDATE");
+        }
+    }
 
     private static class Image {
         private Image(ImageDecoder decoder) {
@@ -700,6 +829,8 @@ public class IntensifyImageManager implements ValueAnimator.AnimatorUpdateListen
         void onImageBlockLoadFinished();
 
         void onRequestInvalidate();
+
+        void onError(String message, Exception e);
     }
 
     private class IntensifyImageHandler extends Handler {
@@ -711,6 +842,10 @@ public class IntensifyImageManager implements ValueAnimator.AnimatorUpdateListen
         @Override
         public void handleMessage(Message msg) {
             switch (msg.what) {
+                case MSG_IMAGE_LOAD:
+                    Logger.d(TAG, "MSG_IMAGE_LOAD");
+                    load();
+                    break;
                 case MSG_IMAGE_INIT:
                     Logger.d(TAG, "MSG_IMAGE_INIT");
                     initialize();

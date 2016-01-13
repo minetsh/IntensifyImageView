@@ -43,6 +43,8 @@ public class IntensifyViewAttacher<P extends IntensifyView & IntensifyImage>
 
         @Override
         public boolean onScale(ScaleGestureDetector detector) {
+            Logger.d(TAG, "on scale: focusX=" + detector.getFocusX()
+                    + ", focusY=" + detector.getFocusY() + ", factor=" + detector.getScaleFactor());
             mIntensifyView.addScale(detector.getScaleFactor(),
                     Math.round(detector.getFocusX()), Math.round(detector.getFocusY()));
             return true;
@@ -50,25 +52,36 @@ public class IntensifyViewAttacher<P extends IntensifyView & IntensifyImage>
 
         @Override
         public void onScaleEnd(ScaleGestureDetector detector) {
+            Logger.d(TAG, "on scale end");
             mIntensifyView.home();
         }
     }
 
     private class OnGestureAdapter extends GestureDetector.SimpleOnGestureListener {
+
+        @Override
+        public boolean onDown(MotionEvent e) {
+            mIntensifyView.onTouch(e.getX(), e.getY());
+            return true;
+        }
+
         @Override
         public boolean onDoubleTap(MotionEvent e) {
+            Logger.d(TAG, "on double tap");
             mIntensifyView.nextStepScale(Math.round(e.getX()), Math.round(e.getY()));
             return true;
         }
 
         @Override
         public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY) {
+            Logger.d(TAG, "on scroll");
             mIntensifyView.scroll(distanceX, distanceY);
             return true;
         }
 
         @Override
         public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
+            Logger.d(TAG, "on fling");
             mIntensifyView.fling(velocityX, velocityY);
             return true;
         }
