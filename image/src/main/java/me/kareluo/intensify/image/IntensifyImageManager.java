@@ -6,8 +6,10 @@ import android.animation.RectEvaluator;
 import android.animation.ValueAnimator;
 import android.animation.ValueAnimator.AnimatorUpdateListener;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.BitmapFactory.Options;
 import android.graphics.BitmapRegionDecoder;
+import android.graphics.Matrix;
 import android.graphics.Point;
 import android.graphics.PointF;
 import android.graphics.Rect;
@@ -76,10 +78,12 @@ public class IntensifyImageManager {
 
     private Rect mStartRect = new Rect(), mEndRect = new Rect();
 
+    private Matrix mMatrix = new Matrix();
+
     /**
      * 图片的初始的缩放类型
      */
-    private ScaleType mScaleType = ScaleType.FIT_AUTO;
+    private ScaleType mScaleType = ScaleType.NONE;
 
     private State mState = State.NONE;
 
@@ -90,12 +94,13 @@ public class IntensifyImageManager {
 
     private static final int MSG_IMAGE_LOAD = 0;
     private static final int MSG_IMAGE_INIT = 1;
-    private static final int MSG_IMAGE_BLOCK_LOAD = 2;
-    private static final int MSG_IMAGE_HOMING = 3;
+    private static final int MSG_IMAGE_SCALE_TYPE = 2;
+    private static final int MSG_IMAGE_BLOCK_LOAD = 3;
+    private static final int MSG_IMAGE_HOMING = 4;
 
 
     private enum State {
-        NONE, LOAD, INIT
+        NONE, LOAD, INIT, SCALE_TYPE
     }
 
     public IntensifyImageManager(DisplayMetrics metrics, IntensifyInfo info, @NonNull Callback callback) {
@@ -159,17 +164,20 @@ public class IntensifyImageManager {
         release();
         mImage = new Image(decoder);
         mHandler.removeCallbacksAndMessages(null);
-        mHandler.sendEmptyMessage(MSG_IMAGE_LOAD);
-        mHandler.sendEmptyMessage(MSG_IMAGE_INIT);
+//        mHandler.sendEmptyMessage(MSG_IMAGE_LOAD);
+//        mHandler.sendEmptyMessage(MSG_IMAGE_INIT);
+        sendMessage(MSG_IMAGE_LOAD);
     }
 
     private synchronized void load() {
+        if (mState.ordinal() >= State.LOAD.ordinal()) return;
         try {
             mImage.mImageRegion = mImage.mImageDecoder.newRegionDecoder();
             mImage.mImageWidth = mImage.mImageRegion.getWidth();
             mImage.mImageHeight = mImage.mImageRegion.getHeight();
             mImage.mImageOriginalRect = new Rect(0, 0, mImage.mImageWidth, mImage.mImageHeight);
             mImageArea = new RectF(mImage.mImageOriginalRect);
+            Logger.i(TAG, "Load: width=%d, height=%d", mImage.mImageWidth, mImage.mImageHeight);
             mState = State.LOAD;
             mCallback.onImageLoadFinished(mImage.mImageWidth, mImage.mImageHeight);
         } catch (IOException e) {
@@ -178,60 +186,54 @@ public class IntensifyImageManager {
         }
     }
 
-    private synchronized void initialize() {
-        mImageArea.set(mImage.mImageOriginalRect);
-        mInfo.mImageRect = new Rect(0, 0, mImage.mImageWidth, mImage.mImageHeight);
-
-        center(mInfo.mImageRect, mInfo.mVisibleRect);
-
-
-        mInfo.mScale.setScale(1f);
-
-        int sampleSize = 1;
-        // 获取一个合适的inSampleSize
-        if (mInfo.mVisibleRect.isEmpty()) {
-            sampleSize = getSampleSize(1f * mImage.mImageWidth / mDisplayMetrics.widthPixels
-                    * mImage.mImageHeight / mDisplayMetrics.heightPixels);
-        } else {
-            sampleSize = getSampleSize(
-                    Math.max(1f * mImage.mImageWidth / mInfo.mVisibleRect.width(),
-                            1f * mImage.mImageHeight / mInfo.mVisibleRect.height()));
+    private synchronized void initialize(Rect drawingRect) {
+        if (isEmpty(drawingRect) || mState.ordinal() >= State.INIT.ordinal()) {
+            return;
         }
+
+        int sampleSize = getSampleSize(
+                Math.max(1f * mImage.mImageWidth / drawingRect.width(),
+                        1f * mImage.mImageHeight / drawingRect.height()));
 
         mImage.mImageCacheScale = sampleSize;
         Options options = new Options();
         options.inSampleSize = sampleSize;
         mImage.mImageCache = mImage.mImageRegion.decodeRegion(mImage.mImageOriginalRect, options);
+        mState = State.INIT;
+        mCallback.onImageInitFinished(sampleSize);
 
-        Logger.i(TAG, "Initialize: Width=%d, Height=%d, SampleSize=%d", mImage.mImageWidth,
-                mImage.mImageHeight, sampleSize);
+        Logger.i(TAG, "Initialize: SampleSize=%d", sampleSize);
 
-        initScaleType();
+        initScaleType(drawingRect);
     }
 
-    private void initScaleType() {
-        Rect visibleRect = mInfo.mVisibleRect;
+    private synchronized void initScaleType(Rect drawingRect) {
+        mImageArea.set(mImage.mImageOriginalRect);
+        if (mScaleType == ScaleType.NONE) {
+            mState = State.SCALE_TYPE;
+            mCallback.onImageScaleChanged(1f, 0, 0);
+            return;
+        }
+
+        Rect visibleRect = drawingRect;
         // 是否为垂直型图片
         boolean vertical = Double.compare(mImage.mImageHeight * visibleRect.width(),
                 mImage.mImageWidth * visibleRect.height()) > 0;
         Logger.i(TAG, "InitScaleType: IsVerticalType=" + vertical);
-        mInfo.mImageRect.set(mImage.mImageOriginalRect);
         switch (mScaleType) {
             case FIT_CENTER:
                 Logger.i(TAG, "InitScaleType: FIT_CENTER");
                 if (vertical) {
                     // 长图
                     mBaseScale = 1f * visibleRect.height() / mImage.mImageHeight;
-                    mInfo.mScale.setScale(mBaseScale);
-                    center(mInfo.mImageRect, visibleRect.width(), visibleRect.height());
-                    mInfo.mScale.focus.set(visibleRect.centerX(), visibleRect.centerY());
                 } else {
                     // 宽图
                     mBaseScale = 1f * visibleRect.width() / mImage.mImageWidth;
-                    mInfo.mScale.setScale(mBaseScale);
-                    center(mInfo.mImageRect, visibleRect.width(), visibleRect.height());
-                    mInfo.mScale.focus.set(visibleRect.centerX(), visibleRect.centerY());
                 }
+                mMatrix.setScale(mBaseScale, mBaseScale);
+                mMatrix.mapRect(mImageArea);
+                center(mImageArea, drawingRect);
+                mCallback.onImageScaleChanged(mBaseScale, mImageArea.left, mImageArea.top);
                 break;
             case FIT_AUTO:
                 Logger.i(TAG, "InitScaleType: FIT_AUTO");
@@ -249,8 +251,8 @@ public class IntensifyImageManager {
                 }
                 break;
         }
-        Logger.i(TAG, "InitScaleType: ImageRect=" + mInfo.mImageRect
-                + ", FocusPoint=" + mInfo.mScale.focus + ", BaseScale=" + mBaseScale);
+        mState = State.SCALE_TYPE;
+        Logger.i(TAG, "InitScaleType: ImageRect=%s, BaseScale=%f", mImageArea.toString(), mBaseScale);
     }
 
     private boolean loadImageBlock(BlockInfo info) {
@@ -386,8 +388,20 @@ public class IntensifyImageManager {
         rect.right += offset;
     }
 
+    public static void center(RectF rect, Rect frame) {
+        center(rect, frame.width(), frame.height());
+    }
+
     private static void center(Rect rect, Rect frame) {
         center(rect, frame.width(), frame.height());
+    }
+
+    public static void center(RectF rect, int width, int height) {
+        float w = rect.width(), h = rect.height();
+        rect.left = (width - w) / 2;
+        rect.top = (height - h) / 2;
+        rect.right = rect.left + w;
+        rect.bottom = rect.top + h;
     }
 
     private static void center(Rect rect, int width, int height) {
@@ -412,7 +426,7 @@ public class IntensifyImageManager {
 
     public void setScaleType(ScaleType scaleType) {
         mScaleType = scaleType;
-        initScaleType();
+//        initScaleType();
         requestInvalidate();
     }
 
@@ -448,6 +462,13 @@ public class IntensifyImageManager {
         }
     }
 
+    public void transform(Scale scale, float aScale, float focusX, float focusY) {
+        Logger.i(TAG, "Transform: aScale=%f, focusX=%s, focusY=%f", aScale, focusX, focusY);
+        mMatrix.setScale(aScale, aScale, focusX, focusY);
+        mMatrix.mapRect(mImageArea);
+        scale.setScale(scale.curScale * aScale);
+    }
+
     private void requestInvalidate() {
         if (mCallback != null) {
             mCallback.onRequestInvalidate();
@@ -457,8 +478,47 @@ public class IntensifyImageManager {
     public List<ImageDrawable> getImageDrawables(@NonNull Rect drawingRect, @NonNull Scale scale) {
         if (drawingRect.isEmpty() || isNeedPrepare(drawingRect)) return Collections.emptyList();
 
+//        mMatrix.setScale(scale.curScale / scale.preScale,
+//                scale.curScale / scale.preScale, scale.focus.x+mImageArea.left, scale.focus.y+mImageArea.top);
+//        mMatrix.mapRect(mImageArea);
 
-        return Collections.emptyList();
+//        mMatrix.setScale(scale.curScale/scale.preScale, );
+
+        Logger.d(TAG, "DrawingRect=" + drawingRect);
+
+        RectF rect = new RectF(drawingRect);
+
+        boolean intersect = rect.intersect(mImageArea);
+
+        float block = BLOCK_SIZE * scale.curScale;
+
+        Point offset = new Point(Math.round(rect.left), Math.round(rect.top));
+
+        rect.offsetTo(0, 0);
+
+        Rect blocks = blocks(rect, block);
+        List<ImageDrawable> drawables = new ArrayList<>();
+
+        Logger.d(TAG, "Drawing-Rect:" + round(mImageArea));
+
+        ImageDrawable drawable = new ImageDrawable(mImage.mImageCache, null, round(mImageArea));
+        drawables.add(drawable);
+
+//        for (int i = blocks.top; i <= blocks.bottom; i++) {
+//            for (int j = blocks.left; j <= blocks.right; j++) {
+//                ImageDrawable drawable = new ImageDrawable(mImage.mImageCache, block(j, i, BLOCK_SIZE),
+//                        blockRect(j, i, Math.round(block), offset.x, offset.y));
+//                drawables.add(drawable);
+//            }
+//        }
+
+
+        return drawables;
+    }
+
+    public static Rect round(RectF rect) {
+        return new Rect(Math.round(rect.left), Math.round(rect.top),
+                Math.round(rect.right), Math.round(rect.bottom));
     }
 
     public boolean isNeedPrepare(Rect drawingRect) {
@@ -468,6 +528,9 @@ public class IntensifyImageManager {
                 return true;
             case LOAD:
                 sendMessage(MSG_IMAGE_INIT, drawingRect);
+                return true;
+            case INIT:
+                sendMessage(MSG_IMAGE_SCALE_TYPE, drawingRect);
                 return true;
         }
         return false;
@@ -603,8 +666,31 @@ public class IntensifyImageManager {
         );
     }
 
+    public static Rect block(int x, int y, int size) {
+        return new Rect(x * size, y * size, x * size + size, y * size + size);
+    }
+
+    public static Rect blocks(RectF rect, float size) {
+        return new Rect(
+                floor(rect.left / size), floor(rect.top / size),
+                ceil(rect.right / size), ceil(rect.bottom / size)
+        );
+    }
+
+    public static int floor(float value) {
+        return (int) Math.floor(value + 0.5f);
+    }
+
+    public static int ceil(float value) {
+        return (int) Math.ceil(value + 0.5f);
+    }
+
     public static int bitValue(int value) {
         return value == 0 ? 0 : 1;
+    }
+
+    public static boolean isEmpty(Rect rect) {
+        return rect == null || rect.isEmpty();
     }
 
     /**
@@ -623,6 +709,19 @@ public class IntensifyImageManager {
 
         rect.offset(Math.round(focus.x - deltaX), Math.round(focus.y - deltaY));
     }
+
+    public static void scale(RectF rect, float scale, PointF focus) {
+        PointF offset = new PointF(rect.left, rect.top);
+        rect.offsetTo(0, 0);
+        rect.right = rect.right * scale;
+        rect.bottom = rect.bottom * scale;
+
+        float deltaX = (focus.x - offset.x) * scale;
+        float deltaY = (focus.y - offset.y) * scale;
+
+        rect.offset(focus.x - deltaX, focus.y - deltaY);
+    }
+
 
     /**
      * 获取bitmap的字节数
@@ -824,7 +923,11 @@ public class IntensifyImageManager {
     public interface Callback {
         void onImageLoadFinished(int width, int height);
 
-        void omImageInitFinished(float scale);
+        void onImageInitFinished(int sampleSize);
+
+        void onLocationChanged(float x, float y);
+
+        void onImageScaleChanged(float scale, float x, float y);
 
         void onImageBlockLoadFinished();
 
@@ -848,7 +951,7 @@ public class IntensifyImageManager {
                     break;
                 case MSG_IMAGE_INIT:
                     Logger.d(TAG, "MSG_IMAGE_INIT");
-                    initialize();
+                    initialize((Rect) msg.obj);
                     requestInvalidate();
                     break;
                 case MSG_IMAGE_BLOCK_LOAD:

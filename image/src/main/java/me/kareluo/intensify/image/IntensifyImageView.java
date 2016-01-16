@@ -12,12 +12,14 @@ import android.graphics.RectF;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.widget.OverScroller;
 
 import java.io.File;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import me.kareluo.intensify.image.IntensifyImageManager.ImageDrawable;
 
@@ -60,6 +62,8 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
     private RectF mImageRect = new RectF();
 
     private Rect mDrawingRect = new Rect();
+
+    private Scale mScale = new Scale(1f, 0f, 0f);
 
     private OverScroller mScroller;
 
@@ -125,33 +129,35 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
     }
 
     private void requestInvalidate() {
-        if (mRunnable != null) return;
-        long duration = SystemClock.uptimeMillis() - mPreInvalidateTime;
-        if (duration < LOOP_FRAME_MILLIS) {
-            postDelayed(mRunnable = new Runnable() {
-                @Override
-                public void run() {
-                    mRunnable = null;
-                    mPreInvalidateTime = SystemClock.uptimeMillis();
-                    invalidate(getVisibleRect());
-                }
-            }, LOOP_FRAME_MILLIS - duration);
-        } else {
-            if (Looper.getMainLooper() == Looper.myLooper()) {
-                mRunnable = null;
-                mPreInvalidateTime = SystemClock.uptimeMillis();
-                invalidate(getVisibleRect());
-            } else {
-                post(mRunnable = new Runnable() {
-                    @Override
-                    public void run() {
-                        mRunnable = null;
-                        mPreInvalidateTime = SystemClock.uptimeMillis();
-                        invalidate(getVisibleRect());
-                    }
-                });
-            }
-        }
+        postInvalidate();
+
+//        if (mRunnable != null) return;
+//        long duration = SystemClock.uptimeMillis() - mPreInvalidateTime;
+//        if (duration < LOOP_FRAME_MILLIS) {
+//            postDelayed(mRunnable = new Runnable() {
+//                @Override
+//                public void run() {
+//                    mRunnable = null;
+//                    mPreInvalidateTime = SystemClock.uptimeMillis();
+//                    invalidate(getVisibleRect());
+//                }
+//            }, LOOP_FRAME_MILLIS - duration);
+//        } else {
+//            if (Looper.getMainLooper() == Looper.myLooper()) {
+//                mRunnable = null;
+//                mPreInvalidateTime = SystemClock.uptimeMillis();
+//                invalidate(getVisibleRect());
+//            } else {
+//                post(mRunnable = new Runnable() {
+//                    @Override
+//                    public void run() {
+//                        mRunnable = null;
+//                        mPreInvalidateTime = SystemClock.uptimeMillis();
+//                        invalidate(getVisibleRect());
+//                    }
+//                });
+//            }
+//        }
     }
 
     @Override
@@ -159,8 +165,11 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
         getDrawingRect(mInfo.mVisibleRect);
         getDrawingRect(mDrawingRect);
         int save = canvas.save();
-//        List<ImageDrawable> drawables1 = mIntensifyManager.getImageDrawables(mDrawingRect);
-        List<ImageDrawable> drawables = mIntensifyManager.getImageDrawables();
+
+        Logger.d(TAG, "Scroll-Pos: X=" + getScrollX() + ", Y=" + getScrollY());
+
+        List<ImageDrawable> drawables = mIntensifyManager.getImageDrawables(mDrawingRect, mScale);
+//        List<ImageDrawable> drawables = mIntensifyManager.getImageDrawables();
 
         for (ImageDrawable drawable : drawables) {
             canvas.drawBitmap(drawable.mBitmap, drawable.mSrc, drawable.mDst, mPaint);
@@ -216,19 +225,25 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
     public void setScale(float scale, int focusX, int focusY) {
         if (scale < mMinimumScale) scale = mMinimumScale;
         if (scale > mMaximumScale) scale = mMaximumScale;
-        mInfo.mScale.set(scale, focusX, focusY);
+//        mInfo.mScale.set(scale, focusX, focusY);
+        mScale.set(scale, focusX, focusY);
+        Logger.d(TAG, "Scale: scale=" + scale + ", focusX=" + focusX + ", focusY=" + focusY);
         requestInvalidate();
     }
 
     @Override
     public void addScale(float scale, int focusX, int focusY) {
-        setScale(mInfo.mScale.curScale * scale, focusX, focusY);
+//        setScale(mInfo.mScale.curScale * scale, focusX, focusY);
+//        setScale(mScale.curScale * scale, focusX, focusY);
+        mIntensifyManager.transform(mScale, scale, focusX+getScrollX(), focusY+getScrollY());
+        requestInvalidate();
     }
 
     @Override
     public void scroll(float distanceX, float distanceY) {
-        mInfo.mImageRect.offset(-Math.round(distanceX), -Math.round(distanceY));
-        requestInvalidate();
+//        mInfo.mImageRect.offset(-Math.round(distanceX), -Math.round(distanceY));
+//        requestInvalidate();
+        scrollBy(Math.round(distanceX), Math.round(distanceY));
     }
 
     @Override
@@ -258,9 +273,9 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
     public void fling(final float velocityX, final float velocityY) {
         Logger.d(TAG, "Fling: velocityX=" + velocityX + ", velocityY=" + velocityY);
 
-        mScroller.fling(getScrollX(), getScrollY(), -Math.round(velocityX), -Math.round(velocityY),
-                0, Math.round(mImageRect.right - getWidth()), 0, Math.round(mImageRect.bottom - getHeight()));
-        postInvalidate();
+//        mScroller.fling(getScrollX(), getScrollY(), -Math.round(velocityX), -Math.round(velocityY),
+//                0, Math.round(mImageRect.right - getWidth()), 0, Math.round(mImageRect.bottom - getHeight()));
+//        postInvalidate();
 
 //        if (Math.abs(velocityY) > Math.abs(velocityX)) {
 //            ValueAnimator animator = ValueAnimator.ofFloat(velocityY / FRICTION_RATIO, 0);
@@ -344,15 +359,30 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
     @Override
     public void onImageLoadFinished(int width, int height) {
         Logger.d(TAG, "Load finished: width=" + width + ",height=" + height);
+        requestInvalidate();
     }
 
     @Override
-    public void omImageInitFinished(float scale) {
+    public void onImageInitFinished(int sampleSize) {
+        Logger.d(TAG, "Init finished: sampleSize=" + sampleSize);
         mScaleSteps.clear();
         float baseScale = mIntensifyManager.getBaseScale();
         mScaleSteps.add(baseScale);
         mScaleSteps.add(baseScale * 2f);
         mScaleSteps.add(baseScale * 3f);
+    }
+
+    @Override
+    public void onLocationChanged(float x, float y) {
+        scrollTo(Math.abs(Math.min(Math.round(x), 0)), Math.abs(Math.min(Math.round(y), 0)));
+    }
+
+    @Override
+    public void onImageScaleChanged(float scale, float x, float y) {
+        Logger.d(TAG, "Scale Changed: scale=" + scale + ", x=" + x + ",y=" + y);
+//        scrollTo(Math.round(x), Math.round(y));
+        mScale.setScale(scale);
+        requestInvalidate();
     }
 
     @Override
