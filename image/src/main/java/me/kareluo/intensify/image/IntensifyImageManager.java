@@ -2,11 +2,9 @@ package me.kareluo.intensify.image;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
-import android.animation.RectEvaluator;
 import android.animation.ValueAnimator;
 import android.animation.ValueAnimator.AnimatorUpdateListener;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.BitmapFactory.Options;
 import android.graphics.BitmapRegionDecoder;
 import android.graphics.Matrix;
@@ -19,10 +17,10 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.Message;
+import android.renderscript.Float2;
 import android.support.annotation.NonNull;
 import android.util.DisplayMetrics;
 import android.util.Log;
-import android.util.LruCache;
 import android.util.SparseArray;
 import android.view.animation.DecelerateInterpolator;
 
@@ -36,7 +34,6 @@ import java.util.List;
 
 import me.kareluo.intensify.image.IntensifyImage.Scale;
 
-import static me.kareluo.intensify.image.IntensifyImage.DURATION_ZOOM_HOME;
 import static me.kareluo.intensify.image.IntensifyImage.IntensifyInfo;
 import static me.kareluo.intensify.image.IntensifyImage.ScaleType;
 
@@ -50,8 +47,6 @@ public class IntensifyImageManager {
 
     private Callback mCallback;
 
-//    private volatile IntensifyImage.IntensifyInfo mInfo;
-
     private IntensifyInfo mInfo;
 
     private HandlerThread mHandlerThread;
@@ -62,28 +57,22 @@ public class IntensifyImageManager {
 
     private float mBaseScale = 1f;
 
-    private ValueAnimator mZoomHomeAnimator;
-
     private ZoomAnimatorAdapter mZoomAdapter;
 
     private ValueAnimator mZoomAnimator;
 
-    private ValueAnimator mFlingAnimator;
-
-    private FlingAnimatorAdapter mFlingAdapter;
-
-    private ValueAnimator mAnimation;
-
     private RectF mImageArea = new RectF();
 
-    private Rect mStartRect = new Rect(), mEndRect = new Rect();
+    private RectF mStartRect = new RectF(), mEndRect = new RectF();
 
     private Matrix mMatrix = new Matrix();
+
+    private static final int MAX_OVER_LENGTH = 300;
 
     /**
      * 图片的初始的缩放类型
      */
-    private ScaleType mScaleType = ScaleType.NONE;
+    private ScaleType mScaleType = ScaleType.FIT_CENTER;
 
     private State mState = State.NONE;
 
@@ -96,8 +85,7 @@ public class IntensifyImageManager {
     private static final int MSG_IMAGE_INIT = 1;
     private static final int MSG_IMAGE_SCALE_TYPE = 2;
     private static final int MSG_IMAGE_BLOCK_LOAD = 3;
-    private static final int MSG_IMAGE_HOMING = 4;
-
+    private static final int MSG_IMAGE_HOME = 4;
 
     private enum State {
         NONE, LOAD, INIT, SCALE_TYPE
@@ -113,22 +101,10 @@ public class IntensifyImageManager {
         Logger.i(TAG, "Constructor: " + mDisplayMetrics);
 
         mZoomAdapter = new ZoomAnimatorAdapter();
-        mZoomHomeAnimator = ValueAnimator.ofFloat(0, 1f);
-        mZoomHomeAnimator.setDuration(IntensifyImage.DURATION_ZOOM_HOME);
-        mZoomHomeAnimator.setInterpolator(new DecelerateInterpolator());
-        mZoomHomeAnimator.addUpdateListener(mZoomAdapter);
-
         mZoomAnimator = ValueAnimator.ofFloat(0, 1f);
         mZoomAnimator.setDuration(IntensifyImage.DURATION_ZOOM);
         mZoomAnimator.setInterpolator(new DecelerateInterpolator());
         mZoomAnimator.addUpdateListener(mZoomAdapter);
-
-        mFlingAdapter = new FlingAnimatorAdapter();
-        mFlingAnimator = ValueAnimator.ofFloat(0, 1f);
-        mFlingAnimator.setDuration(IntensifyImage.DURATION_FLING);
-        mFlingAnimator.setInterpolator(new DecelerateInterpolator());
-        mFlingAnimator.addUpdateListener(mFlingAdapter);
-        mFlingAnimator.addListener(mFlingAdapter);
     }
 
     public void onAttached() {
@@ -215,20 +191,19 @@ public class IntensifyImageManager {
             return;
         }
 
-        Rect visibleRect = drawingRect;
         // 是否为垂直型图片
-        boolean vertical = Double.compare(mImage.mImageHeight * visibleRect.width(),
-                mImage.mImageWidth * visibleRect.height()) > 0;
+        boolean vertical = Double.compare(mImage.mImageHeight * drawingRect.width(),
+                mImage.mImageWidth * drawingRect.height()) > 0;
         Logger.i(TAG, "InitScaleType: IsVerticalType=" + vertical);
         switch (mScaleType) {
             case FIT_CENTER:
                 Logger.i(TAG, "InitScaleType: FIT_CENTER");
                 if (vertical) {
                     // 长图
-                    mBaseScale = 1f * visibleRect.height() / mImage.mImageHeight;
+                    mBaseScale = 1f * drawingRect.height() / mImage.mImageHeight;
                 } else {
                     // 宽图
-                    mBaseScale = 1f * visibleRect.width() / mImage.mImageWidth;
+                    mBaseScale = 1f * drawingRect.width() / mImage.mImageWidth;
                 }
                 mMatrix.setScale(mBaseScale, mBaseScale);
                 mMatrix.mapRect(mImageArea);
@@ -238,16 +213,16 @@ public class IntensifyImageManager {
             case FIT_AUTO:
                 Logger.i(TAG, "InitScaleType: FIT_AUTO");
                 if (vertical) {
-                    mBaseScale = 1f * visibleRect.height() / mImage.mImageHeight;
+                    mBaseScale = 1f * drawingRect.height() / mImage.mImageHeight;
                     mInfo.mScale.setScale(mBaseScale);
                     mInfo.mImageRect.offsetTo(mInfo.mImageRect.left, 0);
-                    centerHorizontal(mInfo.mImageRect, visibleRect.width());
-                    mInfo.mScale.focus.set(visibleRect.centerX(), 0);
+                    centerHorizontal(mInfo.mImageRect, drawingRect.width());
+                    mInfo.mScale.focus.set(drawingRect.centerX(), 0);
                 } else {
-                    mBaseScale = 1f * visibleRect.width() / mImage.mImageWidth;
+                    mBaseScale = 1f * drawingRect.width() / mImage.mImageWidth;
                     mInfo.mScale.setScale(mBaseScale);
-                    center(mInfo.mImageRect, visibleRect);
-                    mInfo.mScale.focus.set(visibleRect.centerX(), visibleRect.centerY());
+                    center(mInfo.mImageRect, drawingRect);
+                    mInfo.mScale.focus.set(drawingRect.centerX(), drawingRect.centerY());
                 }
                 break;
         }
@@ -291,8 +266,8 @@ public class IntensifyImageManager {
     /**
      * 请求图片归位
      */
-    public void home() {
-        mHandler.sendEmptyMessage(MSG_IMAGE_HOMING);
+    public void home(Rect drawingRect) {
+        sendMessage(MSG_IMAGE_HOME, drawingRect);
     }
 
     /**
@@ -330,42 +305,20 @@ public class IntensifyImageManager {
         return true;
     }
 
-    private void zoomHoming() {
-        if (mInfo.mImageRect.contains(mInfo.mVisibleRect)) return;
-
-        final Rect reuseRect = new Rect();
-        mStartRect.set(mInfo.mImageRect);
-        mEndRect.set(mInfo.mImageRect);
-        Rect vr = mInfo.mVisibleRect;
-
-        if (mEndRect.height() < vr.height()) {
-            centerVertical(mEndRect, vr.height());
-        } else {
-            if (mEndRect.top > vr.top) {
-                offsetVertical(mEndRect, vr.top - mEndRect.top);
-            } else if (mEndRect.bottom < vr.bottom) {
-                offsetVertical(mEndRect, vr.bottom - mEndRect.bottom);
-            }
-        }
-
-        if (mEndRect.width() < vr.width()) {
-            centerHorizontal(mEndRect, vr.width());
-        } else {
-            if (mEndRect.left > vr.left) {
-                offsetHorizontal(mEndRect, vr.left - mEndRect.left);
-            } else if (mEndRect.right < vr.right) {
-                offsetHorizontal(mEndRect, vr.right - mEndRect.right);
-            }
-        }
-
-        mZoomHomeAnimator.start();
+    private void zoomHoming(Rect drawingRect) {
+        if (Rectangle.contains(mImageArea, drawingRect)) return;
+        if (mZoomAnimator.isRunning()) mZoomAnimator.cancel();
+        mStartRect.set(mImageArea);
+        mEndRect.set(mImageArea);
+        Rectangle.home(mEndRect, drawingRect);
+        mZoomAnimator.start();
     }
 
-    public static Rect evaluate(float fraction, Rect startValue, Rect endValue, @NonNull Rect reuseRect) {
-        int left = startValue.left + (int) ((endValue.left - startValue.left) * fraction);
-        int top = startValue.top + (int) ((endValue.top - startValue.top) * fraction);
-        int right = startValue.right + (int) ((endValue.right - startValue.right) * fraction);
-        int bottom = startValue.bottom + (int) ((endValue.bottom - startValue.bottom) * fraction);
+    public static RectF evaluate(float fraction, RectF startValue, RectF endValue, @NonNull RectF reuseRect) {
+        float left = startValue.left + (endValue.left - startValue.left) * fraction;
+        float top = startValue.top + (endValue.top - startValue.top) * fraction;
+        float right = startValue.right + (endValue.right - startValue.right) * fraction;
+        float bottom = startValue.bottom + (endValue.bottom - startValue.bottom) * fraction;
         reuseRect.set(left, top, right, bottom);
         return reuseRect;
     }
@@ -418,9 +371,33 @@ public class IntensifyImageManager {
         rect.bottom = rect.top + h;
     }
 
+    public static void centerVertical(RectF rectF, float height) {
+        float h = rectF.height();
+        rectF.top = (height - h) / 2;
+        rectF.bottom = rectF.top + h;
+    }
+
     private static void centerHorizontal(Rect rect, int width) {
         int w = rect.width();
         rect.left = (width - w) >> 1;
+        rect.right = rect.left + w;
+    }
+
+    public static void centerVertical(RectF rect, Rect border) {
+        float offsetY = border.centerY() - rect.centerY();
+        rect.top += offsetY;
+        rect.bottom += offsetY;
+    }
+
+    public static void centerHorizontal(RectF rect, Rect border) {
+        float offsetX = border.centerX() - rect.centerX();
+        rect.left += offsetX;
+        rect.right += offsetX;
+    }
+
+    private static void centerHorizontal(RectF rect, float width) {
+        float w = rect.width();
+        rect.left = (width - w) / 2;
         rect.right = rect.left + w;
     }
 
@@ -462,11 +439,96 @@ public class IntensifyImageManager {
         }
     }
 
+    public Float2 damping(Rect screen, float distanceX, float distanceY) {
+        float dx = distanceX, dy = distanceY;
+        if (dx < 0) {
+            if (screen.left <= mImageArea.left) dx = 0;
+            else if (screen.left + dx < mImageArea.left) {
+                dx = mImageArea.left - screen.left;
+            }
+        } else {
+            if (screen.right >= mImageArea.right) dx = 0;
+            else if (screen.right + dx > mImageArea.right) {
+                dx = mImageArea.right - screen.right;
+            }
+        }
+
+        if (dy < 0) {
+            if (screen.top <= mImageArea.top) dy = 0;
+            else if (screen.top + dy < mImageArea.top) {
+                dy = mImageArea.top - screen.top;
+            }
+            Logger.d(TAG, "AAA" + screen.top + "/" + mImageArea.top);
+        } else {
+            if (screen.bottom >= mImageArea.bottom) dy = 0;
+            else if (screen.bottom + dy > mImageArea.bottom) {
+                dy = mImageArea.bottom - screen.bottom;
+            }
+        }
+
+        Logger.d(TAG, "DX = " + dx + ",Dy=" + dy);
+//
+//        if (Math.abs(screen.centerX() - mImageArea.centerX()) > freeX) {
+//            dx /= 3;
+//        }
+//
+//        if (Math.abs(screen.centerY() - mImageArea.centerY()) > freeY) {
+//            dy /= 3;
+//        }
+
+        return new Float2(dx, dy);
+    }
+
+
+    public static float delta(float free, float y, float dx) {
+        if (y > free) {
+            double x = Math.exp(y - free) - 1;
+            if (x + dx < 0) {
+                return (float) (free + x + dx - y);
+            } else {
+                return (float) (Math.log(x + dx + 1) + free - y);
+            }
+        } else {
+            if (y + dx > free) {
+                return (float) (Math.log(y + dx - free + 1) + free - y);
+            } else {
+                return dx;
+            }
+        }
+    }
+
+    public static float f(float x) {
+        return x - 0.25f * x * x / MAX_OVER_LENGTH;
+    }
+
+    public static float pf(float y) {
+        return (float) (2f * MAX_OVER_LENGTH * (1f - Math.sqrt(1f - y / MAX_OVER_LENGTH)));
+    }
+
     public void transform(Scale scale, float aScale, float focusX, float focusY) {
         Logger.i(TAG, "Transform: aScale=%f, focusX=%s, focusY=%f", aScale, focusX, focusY);
         mMatrix.setScale(aScale, aScale, focusX, focusY);
         mMatrix.mapRect(mImageArea);
         scale.setScale(scale.curScale * aScale);
+    }
+
+    public Point scrollTo(Rect drawingRect, int x, int y) {
+        return new Point(Math.max(Math.min(x,
+                Math.round(mImageArea.width() - drawingRect.width())), 0),
+                Math.max(Math.min(y, Math.round(mImageArea.height() - drawingRect.height())), 0));
+    }
+
+    public Point scrollBy(Rect drawingRect, int distanceX, int distanceY) {
+        Point distance = new Point(distanceX, distanceY);
+        if (mImageArea.left > drawingRect.left || mImageArea.right < drawingRect.right) {
+            distance.x = 0;
+        }
+
+        if (mImageArea.top > drawingRect.top || mImageArea.bottom < drawingRect.bottom) {
+            distance.y = 0;
+        }
+
+        return distance;
     }
 
     private void requestInvalidate() {
@@ -477,12 +539,6 @@ public class IntensifyImageManager {
 
     public List<ImageDrawable> getImageDrawables(@NonNull Rect drawingRect, @NonNull Scale scale) {
         if (drawingRect.isEmpty() || isNeedPrepare(drawingRect)) return Collections.emptyList();
-
-//        mMatrix.setScale(scale.curScale / scale.preScale,
-//                scale.curScale / scale.preScale, scale.focus.x+mImageArea.left, scale.focus.y+mImageArea.top);
-//        mMatrix.mapRect(mImageArea);
-
-//        mMatrix.setScale(scale.curScale/scale.preScale, );
 
         Logger.d(TAG, "DrawingRect=" + drawingRect);
 
@@ -511,8 +567,6 @@ public class IntensifyImageManager {
 //                drawables.add(drawable);
 //            }
 //        }
-
-
         return drawables;
     }
 
@@ -546,6 +600,10 @@ public class IntensifyImageManager {
         if (mHandler != null) {
             mHandler.obtainMessage(what, obj).sendToTarget();
         }
+    }
+
+    public RectF getImageArea() {
+        return mImageArea;
     }
 
     public List<ImageDrawable> getImageDrawables() {
@@ -779,47 +837,23 @@ public class IntensifyImageManager {
         @Override
         public void onAnimationUpdate(ValueAnimator animation) {
             Float value = (Float) animation.getAnimatedValue();
-            evaluate(value, mStartRect, mEndRect, mInfo.mImageRect);
+            evaluate(value, mStartRect, mEndRect, mImageArea);
             requestInvalidate();
-        }
-    }
-
-    private class FlingAnimatorAdapter extends AnimatorListenerAdapter
-            implements AnimatorUpdateListener {
-
-        @Override
-        public void onAnimationEnd(Animator animation) {
-            Logger.d(TAG, "ANIMATION END");
-        }
-
-        @Override
-        public void onAnimationCancel(Animator animation) {
-            Logger.d(TAG, "ANIMATION CANCEL");
-        }
-
-        @Override
-        public void onAnimationRepeat(Animator animation) {
-            Logger.d(TAG, "ANIMATION REPEAT");
-        }
-
-        @Override
-        public void onAnimationStart(Animator animation) {
-            Logger.d(TAG, "ANIMATION START");
         }
 
         @Override
         public void onAnimationPause(Animator animation) {
-            Logger.d(TAG, "ANIMATION PAUSE");
+            mCallback.onHomingEnd(mImageArea);
         }
 
         @Override
-        public void onAnimationResume(Animator animation) {
-            Logger.d(TAG, "ANIMATION RESUME");
+        public void onAnimationCancel(Animator animation) {
+            mCallback.onHomingEnd(mImageArea);
         }
 
         @Override
-        public void onAnimationUpdate(ValueAnimator animation) {
-            Logger.d(TAG, "ANIMATION UPDATE");
+        public void onAnimationEnd(Animator animation) {
+            mCallback.onHomingEnd(mImageArea);
         }
     }
 
@@ -933,6 +967,10 @@ public class IntensifyImageManager {
 
         void onRequestInvalidate();
 
+        void onInitScaleTypeFinished(float scale);
+
+        void onHomingEnd(RectF imageRect);
+
         void onError(String message, Exception e);
     }
 
@@ -963,10 +1001,9 @@ public class IntensifyImageManager {
                         }
                     }
                     break;
-                case MSG_IMAGE_HOMING:
+                case MSG_IMAGE_HOME:
                     Logger.d(TAG, "MSG_IMAGE_HOMING");
-//                    if (homing()) requestInvalidate();
-                    zoomHoming();
+                    zoomHoming((Rect) msg.obj);
                     break;
             }
         }

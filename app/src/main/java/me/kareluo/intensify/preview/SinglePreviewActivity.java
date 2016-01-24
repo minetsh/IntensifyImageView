@@ -23,7 +23,7 @@ public class SinglePreviewActivity extends Activity {
 
         mIntensifyImageView = (IntensifyImageView) findViewById(R.id.intensify_image);
         try {
-            mIntensifyImageView.setImage(getAssets().open("cat0.jpg"));
+            mIntensifyImageView.setImage(getAssets().open("xingren.jpg"));
         } catch (IOException e) {
             Log.d(TAG, "");
         }

@@ -33,7 +33,7 @@ public class IntensifyViewAttacher<P extends IntensifyView & IntensifyImage>
         boolean scale = mScaleGestureDetector.onTouchEvent(event);
         switch (event.getAction()) {
             case MotionEvent.ACTION_UP:
-                if (!gesture) mIntensifyView.home();
+                mIntensifyView.home();
                 break;
         }
         return gesture | scale;
@@ -53,7 +53,6 @@ public class IntensifyViewAttacher<P extends IntensifyView & IntensifyImage>
         @Override
         public void onScaleEnd(ScaleGestureDetector detector) {
             Logger.d(TAG, "on scale end");
-            mIntensifyView.home();
         }
     }
 
@@ -82,7 +81,7 @@ public class IntensifyViewAttacher<P extends IntensifyView & IntensifyImage>
         @Override
         public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
             Logger.d(TAG, "on fling");
-            mIntensifyView.fling(velocityX, velocityY);
+            mIntensifyView.fling(-velocityX, -velocityY);
             return true;
         }
     }
