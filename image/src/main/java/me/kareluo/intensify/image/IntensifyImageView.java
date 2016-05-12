@@ -40,6 +40,8 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
 
     private Paint mPaint;
 
+    private Paint mBoardPaint;
+
     private List<Float> mScaleSteps = new ArrayList<>();
 
     private IntensifyViewAttacher<IntensifyImageView> mAttacher;
@@ -91,6 +93,11 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
         mPaint.setColor(Color.GREEN);
         mPaint.setStrokeWidth(1f);
         mPaint.setStyle(Paint.Style.STROKE);
+        mBoardPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        mBoardPaint.setColor(Color.RED);
+        mBoardPaint.setStrokeWidth(2f);
+        mBoardPaint.setStyle(Paint.Style.STROKE);
+
         mAttacher = new IntensifyViewAttacher<>(this);
         mScroller = new OverScroller(context);
     }
@@ -152,6 +159,8 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
 
         Logger.d(TAG, "DR:" + mDrawingRect);
         int save = canvas.save();
+
+        if (DEBUG) canvas.drawRect(mDrawingRect, mBoardPaint);
 
         List<ImageDrawable> drawables = mIntensifyManager.getImageDrawables(mDrawingRect, mScale);
 

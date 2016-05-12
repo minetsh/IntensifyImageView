@@ -31,6 +31,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import me.kareluo.intensify.image.IntensifyImage.Scale;
 
@@ -240,7 +241,7 @@ public class IntensifyImageManager {
                 Options options = new Options();
                 options.inSampleSize = info.inSampleSize;
                 Rect rect = blockRect(info.position.x, info.position.y, BLOCK_SIZE);
-//                boolean intersect = rect.intersect(mImage.mImageRect);
+                boolean intersect = rect.intersect(mImage.mImageOriginalRect);
                 Bitmap bitmap = mImage.mImageRegion.decodeRegion(rect, options);
                 if (bitmap != null) {
                     imageCache.mCaches.put(info.position, bitmap);
@@ -542,31 +543,73 @@ public class IntensifyImageManager {
 
         Logger.d(TAG, "DrawingRect=" + drawingRect);
 
+        Logger.d(TAG, "ImageArea=" + mImageArea);
+
         RectF rect = new RectF(drawingRect);
 
         boolean intersect = rect.intersect(mImageArea);
+
+        rect.offset(-mImageArea.left, -mImageArea.top);
+
+        Logger.d(TAG, "显示区域:" + rect);
+
+        Logger.d(TAG, "Scale=" + scale.curScale);
 
         float block = BLOCK_SIZE * scale.curScale;
 
         Point offset = new Point(Math.round(rect.left), Math.round(rect.top));
 
-        rect.offsetTo(0, 0);
-
         Rect blocks = blocks(rect, block);
+
+        Logger.d(TAG, "Blocks:" + blocks);
+
         List<ImageDrawable> drawables = new ArrayList<>();
 
         Logger.d(TAG, "Drawing-Rect:" + round(mImageArea));
 
-        ImageDrawable drawable = new ImageDrawable(mImage.mImageCache, null, round(mImageArea));
-        drawables.add(drawable);
+        int sampleSize = getSampleSize(1f / scale.curScale);
 
-//        for (int i = blocks.top; i <= blocks.bottom; i++) {
-//            for (int j = blocks.left; j <= blocks.right; j++) {
-//                ImageDrawable drawable = new ImageDrawable(mImage.mImageCache, block(j, i, BLOCK_SIZE),
-//                        blockRect(j, i, Math.round(block), offset.x, offset.y));
-//                drawables.add(drawable);
-//            }
-//        }
+        Logger.d(TAG, "Simplesize=" + sampleSize);
+
+        ImageCache imageCache = mImage.mCurrentImageCache;
+
+        if (imageCache != null && imageCache.mScale != sampleSize) {
+            ImageCache cache = mImage.mImageCaches.get(sampleSize);
+            if (cache == null) {
+                cache = new ImageCache(sampleSize, new HashMap<Point, Bitmap>());
+                mImage.mImageCaches.put(sampleSize, cache);
+            }
+            imageCache = mImage.mCurrentImageCache = cache;
+            mHandler.removeMessages(MSG_IMAGE_BLOCK_LOAD);
+        }
+
+        if (imageCache == null) {
+            mImage.mCurrentImageCache = imageCache =
+                    new ImageCache(sampleSize, new HashMap<Point, Bitmap>());
+            mImage.mImageCaches.put(sampleSize, imageCache);
+        }
+
+        Log.d(TAG, "Simplesize=" + sampleSize);
+        for (int i = blocks.top; i <= blocks.bottom; i++) {
+            for (int j = blocks.left; j <= blocks.right; j++) {
+                Point position = new Point(j, i);
+
+                if (!imageCache.mCaches.containsKey(position)) {
+                    mHandler.obtainMessage(MSG_IMAGE_BLOCK_LOAD,
+                            new BlockInfo(position, sampleSize)).sendToTarget();
+                } else {
+                    Bitmap bitmap = imageCache.mCaches.get(position);
+                    Rect src = bitmapRect(bitmap);
+                    Rect dst = blockRect(j, i, block, Math.round(mImageArea.left), Math.round(mImageArea.top));
+                    if (src.bottom * sampleSize != BLOCK_SIZE || src.right * sampleSize != BLOCK_SIZE) {
+                        Rect newDst = new Rect(src.left, src.top, Math.round(src.right * sampleSize * scale.curScale), Math.round(src.bottom * sampleSize * scale.curScale));
+                        newDst.offset(dst.left, dst.top);
+                        dst.set(newDst);
+                    }
+                    drawables.add(new ImageDrawable(bitmap, src, dst));
+                }
+            }
+        }
         return drawables;
     }
 
@@ -680,6 +723,7 @@ public class IntensifyImageManager {
             mImage.mImageCaches.put(sampleSize, imageCache);
         }
 
+        Log.d(TAG, "Simplesize=" + sampleSize);
         for (int i = blocks.top; i <= blocks.bottom; i++) {
             for (int j = blocks.left; j <= blocks.right; j++) {
                 Point position = new Point(j, i);
@@ -687,9 +731,14 @@ public class IntensifyImageManager {
                     mHandler.obtainMessage(MSG_IMAGE_BLOCK_LOAD,
                             new BlockInfo(position, sampleSize)).sendToTarget();
                 } else {
+                    // 有点耗时
                     Bitmap bitmap = imageCache.mCaches.get(position);
-                    drawables.add(new ImageDrawable(bitmap, bitmapRect(bitmap),
-                            blockRect(j, i, imageBlockSize, imageRect.left, imageRect.top)));
+                    Rect src = bitmapRect(bitmap);
+                    Rect dst = blockRect(j, i, imageBlockSize, imageRect.left, imageRect.top);
+//                    if (src.bottom != BLOCK_SIZE || src.right != BLOCK_SIZE) {
+//                        dst.width() / BLOCK_SIZE
+//                    }
+                    drawables.add(new ImageDrawable(bitmap, src, dst));
                 }
             }
         }
@@ -736,11 +785,11 @@ public class IntensifyImageManager {
     }
 
     public static int floor(float value) {
-        return (int) Math.floor(value + 0.5f);
+        return (int) Math.floor(value);
     }
 
     public static int ceil(float value) {
-        return (int) Math.ceil(value + 0.5f);
+        return (int) Math.ceil(value);
     }
 
     public static int bitValue(int value) {
