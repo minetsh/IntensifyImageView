@@ -19,6 +19,8 @@ import android.os.Looper;
 import android.os.Message;
 import android.renderscript.Float2;
 import android.support.annotation.NonNull;
+import android.support.v4.util.LruCache;
+import android.support.v4.util.Pair;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.SparseArray;
@@ -30,8 +32,8 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 
 import me.kareluo.intensify.image.IntensifyImage.Scale;
 
@@ -64,11 +66,19 @@ public class IntensifyImageManager {
 
     private RectF mImageArea = new RectF();
 
+    private Scale mScale = new Scale(1f, 0f, 0f);
+
     private RectF mStartRect = new RectF(), mEndRect = new RectF();
 
     private Matrix mMatrix = new Matrix();
 
+    private volatile Pair<RectF, Rect> mCurrentState;
+
+    private volatile List<ImageDrawable> mDrawables = Collections.synchronizedList(new LinkedList<ImageDrawable>());
+
     private static final int MAX_OVER_LENGTH = 300;
+
+    private static final int MAX_CACHE_SIZE = 0x960000;
 
     /**
      * 图片的初始的缩放类型
@@ -80,13 +90,15 @@ public class IntensifyImageManager {
     // Fling摩擦系数
     private float FRICTION_RATIO = 6f;
 
-    private static final int BLOCK_SIZE = 200;
+    private static final int BLOCK_SIZE = 300;
 
     private static final int MSG_IMAGE_LOAD = 0;
     private static final int MSG_IMAGE_INIT = 1;
     private static final int MSG_IMAGE_SCALE_TYPE = 2;
     private static final int MSG_IMAGE_BLOCK_LOAD = 3;
     private static final int MSG_IMAGE_HOME = 4;
+    private static final int MSG_IMAGE_DRAW = 5;
+    private static final int MSG_IMAGE_RELEASE = 6;
 
     private enum State {
         NONE, LOAD, INIT, SCALE_TYPE
@@ -121,6 +133,8 @@ public class IntensifyImageManager {
     public void onDetached() {
         mHandlerThread.quit();
         mHandlerThread = null;
+        mHandler.removeCallbacksAndMessages(null);
+        mHandler.sendEmptyMessage(MSG_IMAGE_RELEASE);
         mHandler = null;
         release();
     }
@@ -510,7 +524,9 @@ public class IntensifyImageManager {
         Logger.i(TAG, "Transform: aScale=%f, focusX=%s, focusY=%f", aScale, focusX, focusY);
         mMatrix.setScale(aScale, aScale, focusX, focusY);
         mMatrix.mapRect(mImageArea);
-        scale.setScale(scale.curScale * aScale);
+        scale.setScale(1.0f * mImageArea.width() / mImage.mImageOriginalRect.width());
+
+        Logger.d(TAG, "Scale=" + scale.curScale + "/ RectScale=" + (1.0f * mImageArea.width() / mImage.mImageOriginalRect.width()));
     }
 
     public Point scrollTo(Rect drawingRect, int x, int y) {
@@ -541,77 +557,49 @@ public class IntensifyImageManager {
     public List<ImageDrawable> getImageDrawables(@NonNull Rect drawingRect, @NonNull Scale scale) {
         if (drawingRect.isEmpty() || isNeedPrepare(drawingRect)) return Collections.emptyList();
 
-        Logger.d(TAG, "DrawingRect=" + drawingRect);
-
-        Logger.d(TAG, "ImageArea=" + mImageArea);
-
-        RectF rect = new RectF(drawingRect);
-
-        boolean intersect = rect.intersect(mImageArea);
-
-        rect.offset(-mImageArea.left, -mImageArea.top);
-
-        Logger.d(TAG, "显示区域:" + rect);
-
-        Logger.d(TAG, "Scale=" + scale.curScale);
-
-        float block = BLOCK_SIZE * scale.curScale;
-
-        Point offset = new Point(Math.round(rect.left), Math.round(rect.top));
-
-        Rect blocks = blocks(rect, block);
-
-        Logger.d(TAG, "Blocks:" + blocks);
-
-        List<ImageDrawable> drawables = new ArrayList<>();
-
-        Logger.d(TAG, "Drawing-Rect:" + round(mImageArea));
-
-        int sampleSize = getSampleSize(1f / scale.curScale);
-
-        Logger.d(TAG, "Simplesize=" + sampleSize);
-
-        ImageCache imageCache = mImage.mCurrentImageCache;
-
-        if (imageCache != null && imageCache.mScale != sampleSize) {
-            ImageCache cache = mImage.mImageCaches.get(sampleSize);
-            if (cache == null) {
-                cache = new ImageCache(sampleSize, new HashMap<Point, Bitmap>());
-                mImage.mImageCaches.put(sampleSize, cache);
-            }
-            imageCache = mImage.mCurrentImageCache = cache;
-            mHandler.removeMessages(MSG_IMAGE_BLOCK_LOAD);
+        if (!compareEquals(mCurrentState, Pair.create(mImageArea, drawingRect))) {
+            mHandler.removeMessages(MSG_IMAGE_DRAW);
+            mHandler.obtainMessage(MSG_IMAGE_DRAW, Pair.create(drawingRect, scale)).sendToTarget();
         }
 
-        if (imageCache == null) {
-            mImage.mCurrentImageCache = imageCache =
-                    new ImageCache(sampleSize, new HashMap<Point, Bitmap>());
-            mImage.mImageCaches.put(sampleSize, imageCache);
-        }
+        ArrayList<ImageDrawable> drawables = new ArrayList<>(mDrawables);
+        drawables.add(0, new ImageDrawable(mImage.mImageCache, bitmapRect(mImage.mImageCache), round(mImageArea)));
 
-        Log.d(TAG, "Simplesize=" + sampleSize);
-        for (int i = blocks.top; i <= blocks.bottom; i++) {
-            for (int j = blocks.left; j <= blocks.right; j++) {
-                Point position = new Point(j, i);
-
-                if (!imageCache.mCaches.containsKey(position)) {
-                    mHandler.obtainMessage(MSG_IMAGE_BLOCK_LOAD,
-                            new BlockInfo(position, sampleSize)).sendToTarget();
-                } else {
-                    Bitmap bitmap = imageCache.mCaches.get(position);
-                    Rect src = bitmapRect(bitmap);
-                    Rect dst = blockRect(j, i, block, Math.round(mImageArea.left), Math.round(mImageArea.top));
-                    if (src.bottom * sampleSize != BLOCK_SIZE || src.right * sampleSize != BLOCK_SIZE) {
-                        Rect newDst = new Rect(src.left, src.top, Math.round(src.right * sampleSize * scale.curScale), Math.round(src.bottom * sampleSize * scale.curScale));
-                        newDst.offset(dst.left, dst.top);
-                        dst.set(newDst);
-                    }
-                    drawables.add(new ImageDrawable(bitmap, src, dst));
-                }
-            }
-        }
         return drawables;
     }
+
+    private static boolean compareEquals(Object a, Object b) {
+        return (a == null) ? (b == null) : a.equals(b);
+    }
+
+    LruCache<Point, Bitmap> s = new LruCache<Point, Bitmap>(100) {
+
+        @Override
+        public void resize(int maxSize) {
+            super.resize(maxSize);
+        }
+
+        @Override
+        public void trimToSize(int maxSize) {
+            super.trimToSize(maxSize);
+        }
+
+        @Override
+        protected Bitmap create(Point key) {
+            return super.create(key);
+        }
+
+        @Override
+        protected void entryRemoved(boolean evicted, Point key, Bitmap oldValue, Bitmap newValue) {
+            super.entryRemoved(evicted, key, oldValue, newValue);
+
+        }
+
+        @Override
+        protected int sizeOf(Point key, Bitmap value) {
+            return super.sizeOf(key, value);
+        }
+    };
 
     public static Rect round(RectF rect) {
         return new Rect(Math.round(rect.left), Math.round(rect.top),
@@ -647,108 +635,6 @@ public class IntensifyImageManager {
 
     public RectF getImageArea() {
         return mImageArea;
-    }
-
-    public List<ImageDrawable> getImageDrawables() {
-        if (mImage == null || mImage.mImageDecoder == null) {
-            return new ArrayList<>(0);
-        }
-
-        boolean intersect = false;
-
-        List<ImageDrawable> drawables = new ArrayList<>();
-
-        int imageWidth = mImage.mImageWidth;
-        int imageHeight = mImage.mImageHeight;
-
-        int sampleSize = getSampleSize(1f / mInfo.mScale.curScale);
-        float preScale = mInfo.mScale.preScale;
-        float curScale = mInfo.mScale.curScale;
-        int cacheSimpleSize = mImage.mImageCacheScale;
-
-        if (mImage.mImageCache == null) {
-            mHandler.sendEmptyMessage(MSG_IMAGE_INIT);
-            return drawables;
-        } else {
-            if (Float.compare(preScale, curScale) != 0) {
-                scale(mInfo.mImageRect, curScale / preScale, mInfo.mScale.focus);
-                mInfo.mScale.preScale = curScale;
-            }
-            drawables.add(new ImageDrawable(mImage.mImageCache,
-                    bitmapRect(mImage.mImageCache), mInfo.mImageRect));
-        }
-
-        if (sampleSize >= cacheSimpleSize) {
-            return drawables;
-        }
-
-        int originalBlockSize = BLOCK_SIZE;
-
-        int WIDTH = imageWidth / originalBlockSize + bitValue(imageWidth % originalBlockSize);
-        int HEIGHT = imageHeight / originalBlockSize + bitValue(imageHeight % originalBlockSize);
-
-        Log.d(TAG, "块: W:" + WIDTH + "/H:" + HEIGHT);
-
-        Rect imageRect = mInfo.mImageRect;
-        Rect visibleRect = mInfo.mVisibleRect;
-
-        Rect showRect = new Rect(visibleRect);
-        intersect = showRect.intersect(imageRect);
-        showRect.offset(-imageRect.left, -imageRect.top);
-
-        Log.d(TAG, "可视区域:" + showRect);
-
-        float imageBlockSize = originalBlockSize * imageRect.width() * 1f / mImage.mImageWidth;
-
-        Log.d(TAG, "显示块大小:" + imageBlockSize);
-
-        Rect blocks = visualBlocks(showRect, Math.round(imageBlockSize));
-        Log.d(TAG, "可视块:" + blocks);
-
-        ImageCache imageCache = mImage.mCurrentImageCache;
-
-        if (imageCache != null && imageCache.mScale != sampleSize) {
-            ImageCache cache = mImage.mImageCaches.get(sampleSize);
-            if (cache == null) {
-                cache = new ImageCache(sampleSize, new HashMap<Point, Bitmap>());
-                mImage.mImageCaches.put(sampleSize, cache);
-            }
-            imageCache = mImage.mCurrentImageCache = cache;
-            mHandler.removeMessages(MSG_IMAGE_BLOCK_LOAD);
-        }
-
-        if (imageCache == null) {
-            mImage.mCurrentImageCache = imageCache =
-                    new ImageCache(sampleSize, new HashMap<Point, Bitmap>());
-            mImage.mImageCaches.put(sampleSize, imageCache);
-        }
-
-        Log.d(TAG, "Simplesize=" + sampleSize);
-        for (int i = blocks.top; i <= blocks.bottom; i++) {
-            for (int j = blocks.left; j <= blocks.right; j++) {
-                Point position = new Point(j, i);
-                if (!imageCache.mCaches.containsKey(position)) {
-                    mHandler.obtainMessage(MSG_IMAGE_BLOCK_LOAD,
-                            new BlockInfo(position, sampleSize)).sendToTarget();
-                } else {
-                    // 有点耗时
-                    Bitmap bitmap = imageCache.mCaches.get(position);
-                    Rect src = bitmapRect(bitmap);
-                    Rect dst = blockRect(j, i, imageBlockSize, imageRect.left, imageRect.top);
-//                    if (src.bottom != BLOCK_SIZE || src.right != BLOCK_SIZE) {
-//                        dst.width() / BLOCK_SIZE
-//                    }
-                    drawables.add(new ImageDrawable(bitmap, src, dst));
-                }
-            }
-        }
-
-
-//        Rect block = new Rect(imageRect.left + blocks.left * imageBlockSize, imageRect.top + blocks.top * imageBlockSize, imageRect.left + blocks.right * imageBlockSize, imageRect.top + blocks.bottom * imageBlockSize);
-
-//        Log.d(TAG, "ImageRect:" + imageRect + " / " + "BlockRect:" + block);
-
-        return drawables;
     }
 
     public static Rect bitmapRect(Bitmap bitmap) {
@@ -906,9 +792,16 @@ public class IntensifyImageManager {
         }
     }
 
-    private static class Image {
+    private class Image {
         private Image(ImageDecoder decoder) {
             mImageDecoder = decoder;
+
+            try {
+                mCaches = new IntensifyImageCache(mDisplayMetrics.widthPixels * mDisplayMetrics.heightPixels << 5,
+                        mDisplayMetrics.widthPixels * mDisplayMetrics.heightPixels << 4, BLOCK_SIZE, decoder.newRegionDecoder());
+            } catch (IOException e) {
+
+            }
         }
 
         volatile ImageDecoder mImageDecoder;
@@ -924,6 +817,8 @@ public class IntensifyImageManager {
         volatile Rect mImageOriginalRect;
         volatile int mImageWidth;
         volatile int mImageHeight;
+
+        volatile IntensifyImageCache mCaches;
     }
 
     private static class ImageCache {
@@ -1053,6 +948,62 @@ public class IntensifyImageManager {
                 case MSG_IMAGE_HOME:
                     Logger.d(TAG, "MSG_IMAGE_HOMING");
                     zoomHoming((Rect) msg.obj);
+                    break;
+                case MSG_IMAGE_DRAW:
+
+                    Logger.d(TAG, "MSG_IMAGE_DRAW-A");
+
+                    @SuppressWarnings("unchecked")
+                    Pair<Rect, Scale> args = (Pair<Rect, Scale>) msg.obj;
+
+                    Scale scale = new Scale(args.second);
+                    RectF drawingRect = new RectF(args.first);
+
+                    Logger.d(TAG, "ImageArea:" + mImageArea);
+                    Logger.d(TAG, "DrawingRect:" + drawingRect);
+
+                    if (drawingRect.intersect(mImageArea)) {
+                        drawingRect.offset(-mImageArea.left, -mImageArea.top);
+                        Logger.d(TAG, "intersect");
+                    }
+
+                    float blockSize = BLOCK_SIZE * scale.curScale;
+
+                    Logger.d(TAG, "BlockSize:" + blockSize);
+
+                    Rect blocks = blocks(drawingRect, blockSize);
+
+                    Logger.d(TAG, "Blocks:" + blocks);
+
+                    int sampleSize = getSampleSize(1f / scale.curScale);
+                    mDrawables.clear();
+                    if (mImage.mImageCacheScale > sampleSize) {
+                        List<ImageDrawable> drawables = new ArrayList<>();
+                        for (int i = blocks.top; i <= blocks.bottom; i++) {
+                            for (int j = blocks.left; j <= blocks.right; j++) {
+                                Bitmap bitmap = mImage.mCaches.get(sampleSize).get(new Point(j, i));
+                                if (bitmap == null) continue;
+                                Rect src = bitmapRect(bitmap);
+                                Rect dst = blockRect(j, i, blockSize, Math.round(mImageArea.left), Math.round(mImageArea.top));
+                                if (src.bottom * sampleSize != BLOCK_SIZE || src.right * sampleSize != BLOCK_SIZE) {
+                                    Rect newDst = new Rect(src.left, src.top, Math.round(src.right * sampleSize * args.second.curScale), Math.round(src.bottom * sampleSize * args.second.curScale));
+                                    newDst.offset(dst.left, dst.top);
+                                    dst.set(newDst);
+                                }
+                                drawables.add(new ImageDrawable(bitmap, src, dst));
+                            }
+                        }
+
+                        mDrawables.addAll(drawables);
+                        mCurrentState = Pair.create(new RectF(mImageArea), new Rect(args.first));
+                        requestInvalidate();
+                    }
+
+                    Logger.d(TAG, "MSG_IMAGE_DRAW-B");
+                    break;
+                case MSG_IMAGE_RELEASE:
+                    removeCallbacksAndMessages(null);
+                    mImage.mCaches.evictAll();
                     break;
             }
         }

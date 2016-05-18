@@ -1,8 +1,5 @@
 package me.kareluo.intensify.image;
 
-import android.animation.Animator;
-import android.animation.AnimatorListenerAdapter;
-import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -27,7 +24,7 @@ import me.kareluo.intensify.image.IntensifyImageManager.ImageDrawable;
  */
 public class IntensifyImageView extends IntensifyView implements IntensifyImage,
         IntensifyImageManager.Callback {
-    private static final boolean DEBUG = true;
+    private static final boolean DEBUG = false;
     private static final String TAG = "IntensifyImageView";
 
     private volatile long mPreInvalidateTime = 0l;
@@ -39,6 +36,8 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
     private IntensifyInfo mInfo = new IntensifyInfo();
 
     private Paint mPaint;
+
+    private Paint mTextPaint;
 
     private Paint mBoardPaint;
 
@@ -93,6 +92,13 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
         mPaint.setColor(Color.GREEN);
         mPaint.setStrokeWidth(1f);
         mPaint.setStyle(Paint.Style.STROKE);
+
+        mTextPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        mTextPaint.setColor(Color.GREEN);
+        mTextPaint.setStrokeWidth(1f);
+        mTextPaint.setStyle(Paint.Style.FILL);
+        mTextPaint.setTextSize(24);
+
         mBoardPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         mBoardPaint.setColor(Color.RED);
         mBoardPaint.setStrokeWidth(2f);
@@ -160,14 +166,27 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
         Logger.d(TAG, "DR:" + mDrawingRect);
         int save = canvas.save();
 
-        if (DEBUG) canvas.drawRect(mDrawingRect, mBoardPaint);
+
 
         List<ImageDrawable> drawables = mIntensifyManager.getImageDrawables(mDrawingRect, mScale);
 
+        int i = 0;
         for (ImageDrawable drawable : drawables) {
+            if (drawable.mBitmap.isRecycled()) {
+//                if (DEBUG) canvas.drawRect(drawable.mDst, mPaint);
+                continue;
+            }
             canvas.drawBitmap(drawable.mBitmap, drawable.mSrc, drawable.mDst, mPaint);
-            if (DEBUG) canvas.drawRect(drawable.mDst, mPaint);
+            if (DEBUG) {
+                canvas.drawRect(drawable.mDst, mPaint);
+                canvas.drawText(String.valueOf(++i), drawable.mDst.left + 4, drawable.mDst.top + mTextPaint.getTextSize(), mTextPaint);
+            }
         }
+        if (DEBUG) {
+            canvas.drawRect(mDrawingRect, mBoardPaint);
+            canvas.drawRect(mIntensifyManager.getImageArea(), mBoardPaint);
+        }
+
         canvas.restoreToCount(save);
     }
 

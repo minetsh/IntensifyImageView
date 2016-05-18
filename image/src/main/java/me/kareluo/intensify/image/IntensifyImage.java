@@ -52,6 +52,12 @@ public interface IntensifyImage {
         public float curScale;
         public PointF focus;
 
+        public Scale(Scale scale) {
+            this.preScale = scale.preScale;
+            this.curScale = scale.curScale;
+            this.focus = scale.focus;
+        }
+
         public Scale(float scale, float focusX, float focusY) {
             this.preScale = scale;
             this.curScale = scale;
@@ -67,6 +73,15 @@ public interface IntensifyImage {
         public void setScale(float scale) {
             preScale = curScale;
             curScale = scale;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+
+            Scale scale = (Scale) o;
+            return scale.focus.equals(focus) && Float.compare(scale.curScale, curScale) == 0;
         }
     }
 
