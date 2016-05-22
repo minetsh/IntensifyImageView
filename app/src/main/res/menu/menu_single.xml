@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/menu_choose"
+        android:icon="@mipmap/ic_crop_original_white"
+        android:title="@string/choose_pictures"
+        app:showAsAction="ifRoom" />
+
+    <item
+        android:id="@+id/menu_camera"
+        android:icon="@mipmap/ic_camera_alt_white"
+        android:title="@string/take_photo"
+        app:showAsAction="ifRoom" />
+
+    <item
+        android:id="@+id/menu_scale_type"
+        android:title="@string/scaletype"
+        app:showAsAction="never" />
+</menu>

@@ -11,14 +11,18 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        findViewById(R.id.single_preview).setOnClickListener(this);
+        findViewById(R.id.btn_single_preview).setOnClickListener(this);
+        findViewById(R.id.btn_multi_preview).setOnClickListener(this);
     }
 
     @Override
     public void onClick(View v) {
         switch (v.getId()) {
-            case R.id.single_preview:
+            case R.id.btn_single_preview:
                 startActivity(new Intent(this, SinglePreviewActivity.class));
+                break;
+            case R.id.btn_multi_preview:
+                startActivity(new Intent(this, MultiPreviewActivity.class));
                 break;
         }
     }

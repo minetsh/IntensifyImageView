@@ -1,3 +1,8 @@
 <resources>
-    <string name="app_name">AndroidPicturePreview</string>
+    <string name="app_name">大图预览</string>
+    <string name="single_image">单图</string>
+    <string name="multi_images">多图</string>
+    <string name="choose_pictures">选择图片</string>
+    <string name="take_photo">拍照</string>
+    <string name="scaletype">ScaleType</string>
 </resources>

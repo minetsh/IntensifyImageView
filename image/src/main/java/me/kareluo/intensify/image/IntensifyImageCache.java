@@ -34,11 +34,6 @@ public class IntensifyImageCache extends IntensifyCache<Integer, IntensifyImageC
     }
 
     @Override
-    protected int sizeOf(Integer key, ImageCache value) {
-        return value.size();
-    }
-
-    @Override
     protected ImageCache create(Integer key) {
         return new ImageCache(mSubMaxSize, key);
     }

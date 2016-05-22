@@ -1,8 +1,5 @@
 package me.kareluo.intensify.image;
 
-import android.graphics.PointF;
-import android.graphics.Rect;
-
 import java.io.File;
 import java.io.InputStream;
 
@@ -27,7 +24,7 @@ public interface IntensifyImage {
 
     int getImageHeight();
 
-    Scale getScale();
+    float getScale();
 
     void setScaleType(ScaleType scaleType);
 
@@ -46,52 +43,6 @@ public interface IntensifyImage {
     void onTouch(float x, float y);
 
     void home();
-
-    final class Scale {
-        public float preScale;
-        public float curScale;
-        public PointF focus;
-
-        public Scale(Scale scale) {
-            this.preScale = scale.preScale;
-            this.curScale = scale.curScale;
-            this.focus = scale.focus;
-        }
-
-        public Scale(float scale, float focusX, float focusY) {
-            this.preScale = scale;
-            this.curScale = scale;
-            this.focus = new PointF(focusX, focusY);
-        }
-
-        public void set(float scale, float focusX, float focusY) {
-            this.preScale = curScale;
-            this.curScale = scale;
-            this.focus.set(focusX, focusY);
-        }
-
-        public void setScale(float scale) {
-            preScale = curScale;
-            curScale = scale;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-
-            Scale scale = (Scale) o;
-            return scale.focus.equals(focus) && Float.compare(scale.curScale, curScale) == 0;
-        }
-    }
-
-    final class IntensifyInfo {
-        volatile Scale mScale;
-
-        volatile Rect mVisibleRect;
-
-        volatile Rect mImageRect;
-    }
 
     enum ScaleType {
 

@@ -16,6 +16,7 @@
             </intent-filter>
         </activity>
         <activity android:name=".SinglePreviewActivity" />
+        <activity android:name=".MultiPreviewActivity" />
     </application>
 
 </manifest>
