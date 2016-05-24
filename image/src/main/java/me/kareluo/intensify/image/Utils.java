@@ -108,7 +108,7 @@ public class Utils {
     public static Rect blocks(RectF rect, float size) {
         return new Rect(
                 floor(rect.left / size), floor(rect.top / size),
-                IntensifyImageManager.ceil(rect.right / size), IntensifyImageManager.ceil(rect.bottom / size)
+                IntensifyImageDelegate.ceil(rect.right / size), IntensifyImageDelegate.ceil(rect.bottom / size)
         );
     }
 

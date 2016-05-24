@@ -1,6 +1,5 @@
 package me.kareluo.intensify.image;
 
-import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.animation.ValueAnimator.AnimatorUpdateListener;
@@ -15,7 +14,6 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.Message;
-import android.renderscript.Float2;
 import android.support.annotation.NonNull;
 import android.support.annotation.WorkerThread;
 import android.support.v4.util.Pair;
@@ -35,8 +33,8 @@ import static me.kareluo.intensify.image.IntensifyImage.ScaleType;
 /**
  * Created by felix on 15/12/17.
  */
-public class IntensifyImageManager {
-    private static final String TAG = "IntensifyImageManager";
+public class IntensifyImageDelegate {
+    private static final String TAG = "IntensifyImageDelegate";
 
     private DisplayMetrics mDisplayMetrics;
 
@@ -53,8 +51,6 @@ public class IntensifyImageManager {
     private float mDefaultMinScale = 0.1f;
 
     private float mDefaultMaxScale = 10f;
-
-    private ZoomAnimatorAdapter mZoomAdapter;
 
     private ValueAnimator mZoomAnimator;
 
@@ -87,17 +83,16 @@ public class IntensifyImageManager {
         NONE, SRC, LOAD, INIT, FREE
     }
 
-    public IntensifyImageManager(DisplayMetrics metrics, @NonNull Callback callback) {
+    public IntensifyImageDelegate(DisplayMetrics metrics, @NonNull Callback callback) {
         mDisplayMetrics = metrics;
         mCallback = callback;
         mHandlerThread = new HandlerThread(TAG);
         mHandlerThread.start();
         mHandler = new IntensifyImageHandler(mHandlerThread.getLooper());
-        mZoomAdapter = new ZoomAnimatorAdapter();
         mZoomAnimator = ValueAnimator.ofFloat(0, 1f);
         mZoomAnimator.setDuration(IntensifyImage.DURATION_ZOOM);
         mZoomAnimator.setInterpolator(new DecelerateInterpolator());
-        mZoomAnimator.addUpdateListener(mZoomAdapter);
+        mZoomAnimator.addUpdateListener(new ZoomAnimatorAdapter());
     }
 
     public void onAttached() {
@@ -157,7 +152,8 @@ public class IntensifyImageManager {
         mImage.mImageSampleSize = sampleSize;
         Options options = new Options();
         options.inSampleSize = sampleSize;
-        mImage.mImageCache = mImage.mImageRegion.decodeRegion(new Rect(0, 0, mImage.mImageWidth, mImage.mImageHeight), options);
+        mImage.mImageCache = mImage.mImageRegion.decodeRegion(
+                new Rect(0, 0, mImage.mImageWidth, mImage.mImageHeight), options);
         mState = State.INIT;
         initScaleType(drawingRect);
     }
@@ -167,7 +163,6 @@ public class IntensifyImageManager {
         mImageArea.set(0, 0, mImage.mImageWidth, mImage.mImageHeight);
         if (mScaleType == ScaleType.NONE) {
             mState = State.FREE;
-            mCallback.onImageScaleChanged(1f, 0, 0);
             return;
         }
 
@@ -204,38 +199,34 @@ public class IntensifyImageManager {
 
     @WorkerThread
     private void prepareDraw(Rect rect) {
-        RectF drawingRect = new RectF(rect);
-
-        if (drawingRect.intersect(mImageArea)) {
-            drawingRect.offset(-mImageArea.left, -mImageArea.top);
-        }
-
         float curScale = getScale();
-
-        float blockSize = BLOCK_SIZE * curScale;
-
-        Rect blocks = Utils.blocks(drawingRect, blockSize);
-
         int sampleSize = getSampleSize(1f / curScale);
-
         mDrawables.clear();
         if (mImage.mImageSampleSize > sampleSize) {
+            RectF drawingRect = new RectF(rect);
+
+            if (drawingRect.intersect(mImageArea)) {
+                drawingRect.offset(-mImageArea.left, -mImageArea.top);
+            }
+
+            float blockSize = BLOCK_SIZE * curScale;
+            Rect blocks = Utils.blocks(drawingRect, blockSize);
+
             List<ImageDrawable> drawables = new ArrayList<>();
+            int roundLeft = Math.round(mImageArea.left);
+            int roundTop = Math.round(mImageArea.top);
             for (int i = blocks.top; i <= blocks.bottom; i++) {
                 for (int j = blocks.left; j <= blocks.right; j++) {
                     Bitmap bitmap = null;
                     IntensifyImageCache.ImageCache imageCache = mImage.mImageCaches.get(sampleSize);
-                    if (imageCache != null) {
-                        bitmap = imageCache.get(new Point(j, i));
-                    }
+                    if (imageCache != null) bitmap = imageCache.get(new Point(j, i));
                     if (bitmap == null) continue;
                     Rect src = bitmapRect(bitmap);
-                    Rect dst = Utils.blockRect(j, i, blockSize, Math.round(mImageArea.left), Math.round(mImageArea.top));
+                    Rect dst = Utils.blockRect(j, i, blockSize, roundLeft, roundTop);
                     if (src.bottom * sampleSize != BLOCK_SIZE || src.right * sampleSize != BLOCK_SIZE) {
-                        Rect newDst = new Rect(src.left, src.top, Math.round(src.right * sampleSize * curScale),
-                                Math.round(src.bottom * sampleSize * curScale));
-                        newDst.offset(dst.left, dst.top);
-                        dst.set(newDst);
+                        dst.set(src.left + dst.left, src.top + dst.top,
+                                Math.round(src.right * sampleSize * curScale) + dst.left,
+                                Math.round(src.bottom * sampleSize * curScale) + dst.top);
                     }
                     drawables.add(new ImageDrawable(bitmap, src, dst));
                 }
@@ -307,16 +298,9 @@ public class IntensifyImageManager {
         return mImage != null ? mImage.mImageHeight : 0;
     }
 
-    public boolean isImageLoaded() {
-        return mImage != null && mImage.mImageRegion != null;
-    }
-
-    public boolean isImageInit() {
-        return mImage.mImageSampleSize != 0;
-    }
-
-    public Float2 damping(Rect screen, float distanceX, float distanceY) {
+    public Point damping(Rect screen, float distanceX, float distanceY) {
         float dx = distanceX, dy = distanceY;
+
         if (dx < 0) {
             if (screen.left <= Math.round(mImageArea.left)) dx = 0;
             else if (screen.left + dx < mImageArea.left) {
@@ -341,7 +325,15 @@ public class IntensifyImageManager {
             }
         }
 
-        return new Float2(dx, dy);
+        if (Math.abs(distanceX) > Math.abs(distanceY)) {
+            if (Float.compare(dx, 0f) == 0) {
+                dy = 0f;
+            }
+        } else if (Float.compare(dy, 0f) == 0) {
+            dx = 0f;
+        }
+
+        return new Point(Math.round(dx), Math.round(dy));
     }
 
     public void scale(float scale, float focusX, float focusY) {
@@ -437,10 +429,6 @@ public class IntensifyImageManager {
         return mScaleType;
     }
 
-    public void setCallback(Callback callback) {
-        mCallback = callback;
-    }
-
     private class ZoomAnimatorAdapter extends AnimatorListenerAdapter
             implements AnimatorUpdateListener {
 
@@ -449,21 +437,6 @@ public class IntensifyImageManager {
             Float value = (Float) animation.getAnimatedValue();
             Utils.evaluate(value, mStartRect, mEndRect, mImageArea);
             requestInvalidate();
-        }
-
-        @Override
-        public void onAnimationPause(Animator animation) {
-            mCallback.onHomingEnd(mImageArea);
-        }
-
-        @Override
-        public void onAnimationCancel(Animator animation) {
-            mCallback.onHomingEnd(mImageArea);
-        }
-
-        @Override
-        public void onAnimationEnd(Animator animation) {
-            mCallback.onHomingEnd(mImageArea);
         }
     }
 
@@ -559,23 +532,7 @@ public class IntensifyImageManager {
     }
 
     public interface Callback {
-        void onImageLoadFinished(int width, int height);
-
-        void onImageInitFinished(int sampleSize);
-
-        void onLocationChanged(float x, float y);
-
-        void onImageScaleChanged(float scale, float x, float y);
-
-        void onImageBlockLoadFinished();
-
         void onRequestInvalidate();
-
-        void onInitScaleTypeFinished(float scale);
-
-        void onHomingEnd(RectF imageRect);
-
-        void onError(String message, Exception e);
     }
 
     private class IntensifyImageHandler extends Handler {

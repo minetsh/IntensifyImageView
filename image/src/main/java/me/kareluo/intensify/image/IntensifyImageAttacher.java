@@ -7,17 +7,16 @@ import android.view.ScaleGestureDetector;
 import android.view.View;
 
 /**
- * Created by felix on 15/12/17.
+ * Created by felix on 16/5/24.
  */
-public class IntensifyViewAttacher<P extends IntensifyView & IntensifyImage>
-        implements View.OnTouchListener {
-    private static final String TAG = "IntensifyViewAttacher";
+public class IntensifyImageAttacher implements View.OnTouchListener {
+    private static final String TAG = "IntensifyImageAttacher";
 
-    private P mIntensifyView;
+    private IntensifyImageView mIntensifyView;
     private ScaleGestureDetector mScaleGestureDetector;
     private GestureDetector mGestureDetector;
 
-    public IntensifyViewAttacher(P intensifyView) {
+    public IntensifyImageAttacher(IntensifyImageView intensifyView) {
         mIntensifyView = intensifyView;
         Context context = intensifyView.getContext();
         mScaleGestureDetector = new ScaleGestureDetector(context, new OnScaleGestureAdapter());
@@ -35,13 +34,12 @@ public class IntensifyViewAttacher<P extends IntensifyView & IntensifyImage>
         @Override
         public boolean onScale(ScaleGestureDetector detector) {
             mIntensifyView.addScale(detector.getScaleFactor(),
-                    Math.round(detector.getFocusX()), Math.round(detector.getFocusY()));
+                    detector.getFocusX(), detector.getFocusY());
             return true;
         }
 
         @Override
         public void onScaleEnd(ScaleGestureDetector detector) {
-            Logger.d(TAG, "on scale end");
             mIntensifyView.home();
         }
     }

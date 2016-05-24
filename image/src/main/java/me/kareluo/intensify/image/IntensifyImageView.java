@@ -4,10 +4,12 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.renderscript.Float2;
 import android.util.AttributeSet;
+import android.view.View;
 import android.widget.OverScroller;
 
 import java.io.File;
@@ -15,13 +17,13 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 
-import me.kareluo.intensify.image.IntensifyImageManager.ImageDrawable;
+import me.kareluo.intensify.image.IntensifyImageDelegate.ImageDrawable;
 
 /**
  * Created by felix on 15/12/17.
  */
-public class IntensifyImageView extends IntensifyView implements IntensifyImage,
-        IntensifyImageManager.Callback {
+public class IntensifyImageView extends View implements IntensifyImage,
+        IntensifyImageDelegate.Callback {
 
     private static final String TAG = "IntensifyImageView";
 
@@ -41,7 +43,7 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
 
     private OverScroller mScroller;
 
-    private IntensifyImageManager mIntensifyManager;
+    private IntensifyImageDelegate mDelegate;
 
     private OnSingleTapListener mOnSingleTapListener;
 
@@ -54,20 +56,20 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
     private static final boolean DEBUG = false;
 
     public IntensifyImageView(Context context) {
-        super(context);
+        this(context, null, 0);
     }
 
     public IntensifyImageView(Context context, AttributeSet attrs) {
-        super(context, attrs);
+        this(context, attrs, 0);
     }
 
     public IntensifyImageView(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
+        initialize(context, attrs, defStyleAttr);
     }
 
-    @Override
     protected void initialize(Context context, AttributeSet attrs, int defStyleAttr) {
-        mIntensifyManager = new IntensifyImageManager(getResources().getDisplayMetrics(), this);
+        mDelegate = new IntensifyImageDelegate(getResources().getDisplayMetrics(), this);
         mPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         mPaint.setColor(Color.GREEN);
         mPaint.setStrokeWidth(1f);
@@ -84,19 +86,19 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
         mBoardPaint.setStrokeWidth(2f);
         mBoardPaint.setStyle(Paint.Style.STROKE);
 
-        new IntensifyViewAttacher<>(this);
+        new IntensifyImageAttacher(this);
         mScroller = new OverScroller(context);
     }
 
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
-        mIntensifyManager.onAttached();
+        mDelegate.onAttached();
     }
 
     @Override
     protected void onDetachedFromWindow() {
-        mIntensifyManager.onDetached();
+        mDelegate.onDetached();
         super.onDetachedFromWindow();
     }
 
@@ -104,7 +106,7 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
     protected void onDraw(Canvas canvas) {
         getDrawingRect(mDrawingRect);
 
-        List<ImageDrawable> drawables = mIntensifyManager.getImageDrawables(mDrawingRect);
+        List<ImageDrawable> drawables = mDelegate.getImageDrawables(mDrawingRect);
 
         int save = canvas.save();
         int i = 0;
@@ -121,7 +123,7 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
         }
         if (DEBUG) {
             canvas.drawRect(mDrawingRect, mBoardPaint);
-            canvas.drawRect(mIntensifyManager.getImageArea(), mBoardPaint);
+            canvas.drawRect(mDelegate.getImageArea(), mBoardPaint);
         }
 
         canvas.restoreToCount(save);
@@ -129,63 +131,56 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
 
     @Override
     public void setImage(String path) {
-        mIntensifyManager.load(path);
+        mDelegate.load(path);
     }
 
     @Override
     public void setImage(File file) {
-        mIntensifyManager.load(file);
+        mDelegate.load(file);
     }
 
     @Override
     public void setImage(InputStream inputStream) {
-        mIntensifyManager.load(inputStream);
+        mDelegate.load(inputStream);
     }
 
     @Override
     public int getImageWidth() {
-        return mIntensifyManager != null ? mIntensifyManager.getWidth() : 0;
+        return mDelegate.getWidth();
     }
 
     @Override
     public int getImageHeight() {
-        return mIntensifyManager != null ? mIntensifyManager.getHeight() : 0;
+        return mDelegate.getHeight();
     }
 
     @Override
     public float getScale() {
-        return mIntensifyManager.getScale();
+        return mDelegate.getScale();
     }
 
     @Override
     public void setScaleType(ScaleType scaleType) {
-        mIntensifyManager.setScaleType(scaleType);
+        mDelegate.setScaleType(scaleType);
     }
 
     @Override
     public ScaleType getScaleType() {
-        return mIntensifyManager.getScaleType();
+        return mDelegate.getScaleType();
     }
 
     @Override
-    public void setScale(float scale, int focusX, int focusY) {
-        if (scale < mMinimumScale) scale = mMinimumScale;
-        if (scale > mMaximumScale) scale = mMaximumScale;
-        postInvalidate();
-    }
-
-    @Override
-    public void addScale(float scale, int focusX, int focusY) {
-        mIntensifyManager.scale(scale, focusX + getScrollX(), focusY + getScrollY());
+    public void addScale(float scale, float focusX, float focusY) {
+        mDelegate.scale(scale, focusX + getScrollX(), focusY + getScrollY());
         postInvalidate();
     }
 
     @Override
     public void scroll(float distanceX, float distanceY) {
         getDrawingRect(mDrawingRect);
-        Float2 damping = mIntensifyManager.damping(mDrawingRect, distanceX, distanceY);
+        Point damping = mDelegate.damping(mDrawingRect, distanceX, distanceY);
         getParent().requestDisallowInterceptTouchEvent(damping.x != 0 || damping.y != 0);
-        scrollBy(Math.round(damping.x), Math.round(damping.y));
+        scrollBy(damping.x, damping.y);
     }
 
     @Override
@@ -196,7 +191,7 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
         } else {
             if (fling) {
                 getDrawingRect(mDrawingRect);
-                mIntensifyManager.zoomHoming(mDrawingRect);
+                mDelegate.zoomHoming(mDrawingRect);
                 fling = false;
             }
         }
@@ -205,7 +200,7 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
     @Override
     public void fling(float velocityX, float velocityY) {
         getDrawingRect(mDrawingRect);
-        RectF imageArea = mIntensifyManager.getImageArea();
+        RectF imageArea = mDelegate.getImageArea();
         if (!Utils.isEmpty(imageArea) && !Utils.contains(mDrawingRect, imageArea)) {
             if (mDrawingRect.left <= imageArea.left && velocityX < 0
                     || mDrawingRect.right >= imageArea.right && velocityX > 0) {
@@ -231,9 +226,9 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
     }
 
     @Override
-    public void nextScale(int focusX, int focusY) {
+    public void nextScale(float focusX, float focusY) {
         getDrawingRect(mDrawingRect);
-        mIntensifyManager.zoomScale(mDrawingRect, mIntensifyManager.getNextStepScale(mDrawingRect),
+        mDelegate.zoomScale(mDrawingRect, mDelegate.getNextStepScale(mDrawingRect),
                 focusX + getScrollX(), focusY + getScrollY());
     }
 
@@ -248,7 +243,7 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
     public void home() {
         if (mScroller.isFinished()) {
             getDrawingRect(mDrawingRect);
-            mIntensifyManager.zoomHoming(mDrawingRect);
+            mDelegate.zoomHoming(mDrawingRect);
         }
     }
 
@@ -261,7 +256,7 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
 
     @Override
     public void doubleTap(float x, float y) {
-        nextScale(Math.round(x), Math.round(y));
+        nextScale(x, y);
         if (mOnDoubleTapListener != null) {
             mOnDoubleTapListener.onDoubleTap(isInside(x, y));
         }
@@ -275,7 +270,7 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
     }
 
     public boolean isInside(float x, float y) {
-        return mIntensifyManager.getImageArea().contains(x, y);
+        return mDelegate.getImageArea().contains(x, y);
     }
 
     public void setOnSingleTapListener(OnSingleTapListener listener) {
@@ -299,7 +294,7 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
     }
 
     public float getBaseScale() {
-        return mIntensifyManager.getBaseScale();
+        return mDelegate.getBaseScale();
     }
 
     public void setMinimumScale(float scale) {
@@ -311,53 +306,7 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
     }
 
     @Override
-    public void onImageLoadFinished(int width, int height) {
-        Logger.d(TAG, "Load finished: width=" + width + ",height=" + height);
-
-    }
-
-    @Override
-    public void onImageInitFinished(int sampleSize) {
-        Logger.d(TAG, "Init finished: sampleSize=" + sampleSize);
-        mScaleSteps.clear();
-        float baseScale = mIntensifyManager.getBaseScale();
-        mScaleSteps.add(baseScale);
-        mScaleSteps.add(baseScale * 2f);
-        mScaleSteps.add(baseScale * 3f);
-    }
-
-    @Override
-    public void onLocationChanged(float x, float y) {
-        scrollTo(Math.abs(Math.min(Math.round(x), 0)), Math.abs(Math.min(Math.round(y), 0)));
-    }
-
-    @Override
-    public void onImageScaleChanged(float scale, float x, float y) {
-        Logger.d(TAG, "Scale Changed: scale=" + scale + ", x=" + x + ",y=" + y);
-    }
-
-    @Override
-    public void onImageBlockLoadFinished() {
-
-    }
-
-    @Override
     public void onRequestInvalidate() {
         postInvalidate();
-    }
-
-    @Override
-    public void onInitScaleTypeFinished(float scale) {
-
-    }
-
-    @Override
-    public void onHomingEnd(RectF imageRect) {
-
-    }
-
-    @Override
-    public void onError(String message, Exception e) {
-        // TODO: 错误处理
     }
 }

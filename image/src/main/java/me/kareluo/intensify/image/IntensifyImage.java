@@ -26,15 +26,13 @@ public interface IntensifyImage {
 
     ScaleType getScaleType();
 
-    void setScale(float scale, int focusX, int focusY);
-
-    void addScale(float scale, int focusX, int focusY);
+    void addScale(float scale, float focusX, float focusY);
 
     void scroll(float distanceX, float distanceY);
 
     void fling(float velocityX, float velocityY);
 
-    void nextScale(int focusX, int focusY);
+    void nextScale(float focusX, float focusY);
 
     void onTouch(float x, float y);
 
