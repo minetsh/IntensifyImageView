@@ -6,7 +6,6 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RectF;
-import android.os.SystemClock;
 import android.renderscript.Float2;
 import android.util.AttributeSet;
 import android.widget.OverScroller;
@@ -23,14 +22,7 @@ import me.kareluo.intensify.image.IntensifyImageManager.ImageDrawable;
  */
 public class IntensifyImageView extends IntensifyView implements IntensifyImage,
         IntensifyImageManager.Callback {
-    private static final boolean DEBUG = true;
     private static final String TAG = "IntensifyImageView";
-
-    private volatile long mPreInvalidateTime = 0l;
-
-    private volatile Runnable mRunnable;
-
-    private IntensifyImageManager mIntensifyManager;
 
     private Paint mPaint;
 
@@ -40,8 +32,6 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
 
     private List<Float> mScaleSteps = new ArrayList<>();
 
-    private IntensifyViewAttacher<IntensifyImageView> mAttacher;
-
     private float mMinimumScale = 0.01f;
 
     private float mMaximumScale = 1000f;
@@ -50,32 +40,32 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
 
     private OverScroller mScroller;
 
+    private IntensifyImageManager mIntensifyManager;
+
+    private OnSingleTapListener mOnSingleTapListener;
+
+    private OnDoubleTapListener mOnDoubleTapListener;
+
+    private OnLongPressListener mOnLongPressListener;
+
     private volatile boolean fling = false;
 
-    // 最高62.5帧每秒
-    private static final int LOOP_FRAME_MILLIS = 16;
+    private static final boolean DEBUG = false;
 
     public IntensifyImageView(Context context) {
         super(context);
-        initialize(context, null, 0);
     }
 
     public IntensifyImageView(Context context, AttributeSet attrs) {
         super(context, attrs);
-        initialize(context, attrs, 0);
     }
 
     public IntensifyImageView(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
-        initialize(context, attrs, defStyleAttr);
     }
 
-    public IntensifyImageView(Context context, AttributeSet attrs, int styleAttr, int styleRes) {
-        super(context, attrs, styleAttr, styleRes);
-        initialize(context, attrs, styleAttr);
-    }
-
-    private void initialize(Context context, AttributeSet attrs, int defStyleAttr) {
+    @Override
+    protected void initialize(Context context, AttributeSet attrs, int defStyleAttr) {
         mIntensifyManager = new IntensifyImageManager(getResources().getDisplayMetrics(), this);
         mPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         mPaint.setColor(Color.GREEN);
@@ -93,7 +83,7 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
         mBoardPaint.setStrokeWidth(2f);
         mBoardPaint.setStyle(Paint.Style.STROKE);
 
-        mAttacher = new IntensifyViewAttacher<>(this);
+        new IntensifyViewAttacher<>(this);
         mScroller = new OverScroller(context);
     }
 
@@ -109,10 +99,10 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
         super.onDetachedFromWindow();
     }
 
-    @Override
-    protected void onUpdateWindow(Rect rect) {
-        invalidate(getVisibleRect());
-    }
+//    @Override
+//    protected void onUpdateWindow(Rect rect) {
+//        invalidate(getVisibleRect());
+//    }
 
     @Override
     protected void onDraw(Canvas canvas) {
@@ -129,7 +119,8 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
             canvas.drawBitmap(drawable.mBitmap, drawable.mSrc, drawable.mDst, mPaint);
             if (DEBUG) {
                 canvas.drawRect(drawable.mDst, mPaint);
-                canvas.drawText(String.valueOf(++i), drawable.mDst.left + 4, drawable.mDst.top + mTextPaint.getTextSize(), mTextPaint);
+                canvas.drawText(String.valueOf(++i), drawable.mDst.left + 4,
+                        drawable.mDst.top + mTextPaint.getTextSize(), mTextPaint);
             }
         }
         if (DEBUG) {
@@ -195,21 +186,9 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
 
     @Override
     public void scroll(float distanceX, float distanceY) {
-        Logger.i(TAG, "Scroll: distanceX=%f, distanceY=%f", distanceX, distanceY);
         getDrawingRect(mDrawingRect);
         Float2 damping = mIntensifyManager.damping(mDrawingRect, distanceX, distanceY);
-        Logger.i(TAG, "Damping: X=%f, Y=%f", damping.x, damping.y);
         scrollBy(Math.round(damping.x), Math.round(damping.y));
-    }
-
-    @Override
-    public void scrollBy(int x, int y) {
-        super.scrollBy(x, y);
-    }
-
-    @Override
-    public void scrollTo(int x, int y) {
-        super.scrollTo(x, y);
     }
 
     @Override
@@ -220,7 +199,7 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
         } else {
             if (fling) {
                 getDrawingRect(mDrawingRect);
-                mIntensifyManager.home(mDrawingRect);
+                mIntensifyManager.zoomHoming(mDrawingRect);
                 fling = false;
             }
         }
@@ -228,26 +207,16 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
 
     @Override
     public void fling(float velocityX, float velocityY) {
-        Logger.d(TAG, "Fling: velocityX=" + velocityX + ", velocityY=" + velocityY);
         getDrawingRect(mDrawingRect);
         RectF imageArea = mIntensifyManager.getImageArea();
-        if (imageArea != null && !imageArea.isEmpty() && !Utils.contains(mDrawingRect, imageArea)) {
-
-            Logger.i(TAG, "Fling: begin");
-
-            if (mDrawingRect.left <= imageArea.left && velocityX < 0) {
+        if (!Utils.isEmpty(imageArea) && !Utils.contains(mDrawingRect, imageArea)) {
+            if (mDrawingRect.left <= imageArea.left && velocityX < 0
+                    || mDrawingRect.right >= imageArea.right && velocityX > 0) {
                 velocityX = 0f;
             }
 
-            if (mDrawingRect.right >= imageArea.right && velocityX > 0) {
-                velocityX = 0f;
-            }
-
-            if (mDrawingRect.top <= imageArea.top && velocityY < 0) {
-                velocityY = 0f;
-            }
-
-            if (mDrawingRect.bottom >= imageArea.bottom && velocityY > 0) {
+            if (mDrawingRect.top <= imageArea.top && velocityY < 0
+                    || mDrawingRect.bottom >= imageArea.bottom && velocityY > 0) {
                 velocityY = 0f;
             }
 
@@ -265,20 +234,14 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
     }
 
     @Override
-    public void nextStepScale(int focusX, int focusY) {
-        if (mScaleSteps.isEmpty()) return;
-        float scale = mIntensifyManager.getBaseScale();
-        int step = 0;
-        while (scale >= mScaleSteps.get(step)) {
-            step = (step + 1) % mScaleSteps.size();
-            if (step == 0) break;
-        }
-        setScale(mScaleSteps.get(step), focusX, focusY);
+    public void nextScale(int focusX, int focusY) {
+        getDrawingRect(mDrawingRect);
+        mIntensifyManager.zoomScale(mDrawingRect, mIntensifyManager.getNextStepScale(mDrawingRect),
+                focusX + getScrollX(), focusY + getScrollY());
     }
 
     @Override
     public void onTouch(float x, float y) {
-        Logger.i(TAG, "OnTouch: x=%f, y=%f", x, y);
         if (!mScroller.isFinished()) {
             mScroller.abortAnimation();
         }
@@ -288,8 +251,46 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
     public void home() {
         if (mScroller.isFinished()) {
             getDrawingRect(mDrawingRect);
-            mIntensifyManager.home(mDrawingRect);
+            mIntensifyManager.zoomHoming(mDrawingRect);
         }
+    }
+
+    @Override
+    public void singleTap(float x, float y) {
+        if (mOnSingleTapListener != null) {
+            mOnSingleTapListener.onSingleTap(isInside(x, y));
+        }
+    }
+
+    @Override
+    public void doubleTap(float x, float y) {
+        nextScale(Math.round(x), Math.round(y));
+        if (mOnDoubleTapListener != null) {
+            mOnDoubleTapListener.onDoubleTap(isInside(x, y));
+        }
+    }
+
+    @Override
+    public void longPress(float x, float y) {
+        if (mOnLongPressListener != null) {
+            mOnLongPressListener.onLongPress(isInside(x, y));
+        }
+    }
+
+    public boolean isInside(float x, float y) {
+        return mIntensifyManager.getImageArea().contains(x, y);
+    }
+
+    public void setOnSingleTapListener(OnSingleTapListener listener) {
+        mOnSingleTapListener = listener;
+    }
+
+    public void setOnDoubleTapListener(OnDoubleTapListener listener) {
+        mOnDoubleTapListener = listener;
+    }
+
+    public void setOnLongPressListener(OnLongPressListener listener) {
+        mOnLongPressListener = listener;
     }
 
     public void clearScaleStep() {

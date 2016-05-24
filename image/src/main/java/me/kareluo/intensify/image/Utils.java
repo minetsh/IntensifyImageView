@@ -25,24 +25,24 @@ public class Utils {
         rect.offset(frame.centerX() - rect.centerX(), 0);
     }
 
-    public static void home(RectF rect, Rect border) {
-        if (rect.height() < border.height()) {
-            Utils.centerVertical(rect, border);
+    public static void home(RectF rect, Rect frame) {
+        if (rect.height() < frame.height()) {
+            Utils.centerVertical(rect, frame);
         } else {
-            if (rect.top > border.top) {
-                rect.offset(0, border.top - rect.top);
-            } else if (rect.bottom < border.bottom) {
-                rect.offset(0, border.bottom - rect.bottom);
+            if (rect.top > frame.top) {
+                rect.offset(0, frame.top - rect.top);
+            } else if (rect.bottom < frame.bottom) {
+                rect.offset(0, frame.bottom - rect.bottom);
             }
         }
 
-        if (rect.width() < border.width()) {
-            Utils.centerHorizontal(rect, border);
+        if (rect.width() < frame.width()) {
+            Utils.centerHorizontal(rect, frame);
         } else {
-            if (rect.left > border.left) {
-                rect.offset(border.left - rect.left, 0);
-            } else if (rect.right < border.right) {
-                rect.offset(border.right - rect.right, 0);
+            if (rect.left > frame.left) {
+                rect.offset(frame.left - rect.left, 0);
+            } else if (rect.right < frame.right) {
+                rect.offset(frame.right - rect.right, 0);
             }
         }
     }
@@ -66,6 +66,10 @@ public class Utils {
     }
 
     public static boolean isEmpty(Rect rect) {
+        return rect == null || rect.isEmpty();
+    }
+
+    public static boolean isEmpty(RectF rect) {
         return rect == null || rect.isEmpty();
     }
 
@@ -111,4 +115,10 @@ public class Utils {
     public static int floor(float value) {
         return (int) Math.floor(value);
     }
+
+    public static int range(int v, int min, int max) {
+        return v > max ? max : (v < min ? min : v);
+    }
+
+
 }

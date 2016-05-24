@@ -18,4 +18,9 @@
         android:id="@+id/menu_scale_type"
         android:title="@string/scaletype"
         app:showAsAction="never" />
+
+    <item
+        android:id="@+id/menu_background"
+        android:title="@string/background"
+        app:showAsAction="never" />
 </menu>

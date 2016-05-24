@@ -8,10 +8,6 @@ import java.io.InputStream;
  */
 public interface IntensifyImage {
 
-    int DURATION_FLING = 400;
-
-    int DURATION_ZOOM_HOME = 400;
-
     int DURATION_ZOOM = 300;
 
     void setImage(String path);
@@ -38,11 +34,17 @@ public interface IntensifyImage {
 
     void fling(float velocityX, float velocityY);
 
-    void nextStepScale(int focusX, int focusY);
+    void nextScale(int focusX, int focusY);
 
     void onTouch(float x, float y);
 
     void home();
+
+    void singleTap(float x, float y);
+
+    void doubleTap(float x, float y);
+
+    void longPress(float x, float y);
 
     enum ScaleType {
 
@@ -60,6 +62,25 @@ public interface IntensifyImage {
             nativeInt = ni;
         }
 
+        ScaleType valueOf(int value) {
+            if (value < 0 || value >= values().length) {
+                return NONE;
+            }
+            return values()[value];
+        }
+
         final int nativeInt;
+    }
+
+    interface OnSingleTapListener {
+        void onSingleTap(boolean inside);
+    }
+
+    interface OnDoubleTapListener {
+        void onDoubleTap(boolean inside);
+    }
+
+    interface OnLongPressListener {
+        void onLongPress(boolean inside);
     }
 }

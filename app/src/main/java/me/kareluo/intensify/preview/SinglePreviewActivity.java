@@ -1,19 +1,18 @@
 package me.kareluo.intensify.preview;
 
-import android.app.Activity;
 import android.content.DialogInterface;
-import android.graphics.Rect;
 import android.os.Bundle;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
-import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.View;
 
 import java.io.IOException;
 
 import me.kareluo.intensify.image.IntensifyImage;
 import me.kareluo.intensify.image.IntensifyImageView;
+import me.kareluo.intensify.image.Logger;
 
 /**
  * Created by felix on 15/12/25.
@@ -25,6 +24,8 @@ public class SinglePreviewActivity extends AppCompatActivity {
 
     private String[] mPictures;
 
+    private View mRootView;
+
     private static final String PIC_DIR = "pictures";
 
     @Override
@@ -32,18 +33,19 @@ public class SinglePreviewActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_single);
 
+        mRootView = findViewById(R.id.ll_root);
         mIntensifyImageView = (IntensifyImageView) findViewById(R.id.intensify_image);
 
         try {
             mPictures = getAssets().list(PIC_DIR);
         } catch (IOException e) {
-            e.printStackTrace();
+            Logger.w(TAG, e);
         }
 
         try {
-            mIntensifyImageView.setImage(getAssets().open(PIC_DIR + "/" + mPictures[0]));
+            mIntensifyImageView.setImage(getAssets().open(PIC_DIR + "/xingren.jpg"));
         } catch (IOException e) {
-            Log.d(TAG, "");
+            Logger.w(TAG, e);
         }
     }
 
@@ -64,6 +66,9 @@ public class SinglePreviewActivity extends AppCompatActivity {
                 return true;
             case R.id.menu_scale_type:
                 chooseScaleType();
+                return true;
+            case R.id.menu_background:
+                chooseBackground();
                 return true;
         }
         return super.onOptionsItemSelected(item);
@@ -98,6 +103,25 @@ public class SinglePreviewActivity extends AppCompatActivity {
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
                         mIntensifyImageView.setScaleType(IntensifyImage.ScaleType.values()[which]);
+                    }
+                })
+                .show();
+    }
+
+    private void chooseBackground() {
+        new AlertDialog.Builder(this)
+                .setTitle("请选择背景颜色")
+                .setItems(new CharSequence[]{"黑色", "白色"}, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        switch (which) {
+                            case 0:
+                                mRootView.setBackgroundResource(android.R.color.black);
+                                break;
+                            case 1:
+                                mRootView.setBackgroundResource(android.R.color.white);
+                                break;
+                        }
                     }
                 })
                 .show();

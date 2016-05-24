@@ -31,7 +31,7 @@ public class IntensifyViewAttacher<P extends IntensifyView & IntensifyImage>
         boolean scale = mScaleGestureDetector.onTouchEvent(event);
         switch (event.getAction()) {
             case MotionEvent.ACTION_UP:
-                mIntensifyView.home();
+
                 break;
         }
         return gesture | scale;
@@ -51,6 +51,7 @@ public class IntensifyViewAttacher<P extends IntensifyView & IntensifyImage>
         @Override
         public void onScaleEnd(ScaleGestureDetector detector) {
             Logger.d(TAG, "on scale end");
+            mIntensifyView.home();
         }
     }
 
@@ -58,6 +59,7 @@ public class IntensifyViewAttacher<P extends IntensifyView & IntensifyImage>
 
         @Override
         public boolean onDown(MotionEvent e) {
+            Logger.d(TAG, "on double tap");
             mIntensifyView.onTouch(e.getX(), e.getY());
             return true;
         }
@@ -65,7 +67,7 @@ public class IntensifyViewAttacher<P extends IntensifyView & IntensifyImage>
         @Override
         public boolean onDoubleTap(MotionEvent e) {
             Logger.d(TAG, "on double tap");
-            mIntensifyView.nextStepScale(Math.round(e.getX()), Math.round(e.getY()));
+            mIntensifyView.doubleTap(e.getX(), e.getY());
             return true;
         }
 
@@ -81,6 +83,17 @@ public class IntensifyViewAttacher<P extends IntensifyView & IntensifyImage>
             Logger.d(TAG, "on fling");
             mIntensifyView.fling(-velocityX, -velocityY);
             return true;
+        }
+
+        @Override
+        public boolean onSingleTapConfirmed(MotionEvent e) {
+            mIntensifyView.singleTap(e.getX(), e.getY());
+            return false;
+        }
+
+        @Override
+        public void onLongPress(MotionEvent e) {
+            mIntensifyView.longPress(e.getX(), e.getY());
         }
     }
 }
