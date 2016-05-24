@@ -115,10 +115,4 @@ public class Utils {
     public static int floor(float value) {
         return (int) Math.floor(value);
     }
-
-    public static int range(int v, int min, int max) {
-        return v > max ? max : (v < min ? min : v);
-    }
-
-
 }

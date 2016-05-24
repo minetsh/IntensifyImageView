@@ -13,19 +13,20 @@ public class IntensifyImageCache extends IntensifyCache<Integer, IntensifyImageC
 
     private int mSubMaxSize;
     private Rect mOriginalRect;
-    private BitmapRegionDecoder mBitmapRegionDecoder;
+    private BitmapRegionDecoder mRegionDecoder;
 
     private int BLOCK_SIZE = 300;
 
-    public IntensifyImageCache(int maxSize, int subMaxSize, int blockSize, BitmapRegionDecoder bitmapRegionDecoder) {
+    public IntensifyImageCache(
+            int maxSize, int subMaxSize, int blockSize, BitmapRegionDecoder bitmapRegionDecoder) {
         super(maxSize);
         BLOCK_SIZE = blockSize;
         mSubMaxSize = subMaxSize;
-        mBitmapRegionDecoder = bitmapRegionDecoder;
-        if (mBitmapRegionDecoder == null) {
+        mRegionDecoder = bitmapRegionDecoder;
+        if (mRegionDecoder == null) {
             throw new IllegalArgumentException("BitmapRegionDecoder is null.");
         }
-        mOriginalRect = new Rect(0, 0, mBitmapRegionDecoder.getWidth(), mBitmapRegionDecoder.getHeight());
+        mOriginalRect = new Rect(0, 0, mRegionDecoder.getWidth(), mRegionDecoder.getHeight());
     }
 
     @Override
@@ -72,7 +73,7 @@ public class IntensifyImageCache extends IntensifyCache<Integer, IntensifyImageC
             options.inSampleSize = level;
             Rect rect = blockRect(key.x, key.y, BLOCK_SIZE);
             if (rect.intersect(mOriginalRect)) {
-                return mBitmapRegionDecoder.decodeRegion(rect, options);
+                return mRegionDecoder.decodeRegion(rect, options);
             }
             return null;
         }

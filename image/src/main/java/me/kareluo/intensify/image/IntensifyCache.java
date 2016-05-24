@@ -5,6 +5,7 @@ import java.util.Map;
 
 /**
  * Created by felix on 16/5/18.
+ * Copy from LruCache and add some custom function.
  */
 public class IntensifyCache<K, V, L> {
     private final LinkedHashMap<K, V> map;
@@ -118,6 +119,7 @@ public class IntensifyCache<K, V, L> {
 
     /**
      * just return the value of the key or null.
+     *
      * @param key the cache key.
      * @return value of the key.
      */

@@ -22,6 +22,7 @@ import me.kareluo.intensify.image.IntensifyImageManager.ImageDrawable;
  */
 public class IntensifyImageView extends IntensifyView implements IntensifyImage,
         IntensifyImageManager.Callback {
+
     private static final String TAG = "IntensifyImageView";
 
     private Paint mPaint;
@@ -99,11 +100,6 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
         super.onDetachedFromWindow();
     }
 
-//    @Override
-//    protected void onUpdateWindow(Rect rect) {
-//        invalidate(getVisibleRect());
-//    }
-
     @Override
     protected void onDraw(Canvas canvas) {
         getDrawingRect(mDrawingRect);
@@ -180,7 +176,7 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
 
     @Override
     public void addScale(float scale, int focusX, int focusY) {
-        mIntensifyManager.transform(scale, focusX + getScrollX(), focusY + getScrollY());
+        mIntensifyManager.scale(scale, focusX + getScrollX(), focusY + getScrollY());
         postInvalidate();
     }
 
@@ -188,6 +184,7 @@ public class IntensifyImageView extends IntensifyView implements IntensifyImage,
     public void scroll(float distanceX, float distanceY) {
         getDrawingRect(mDrawingRect);
         Float2 damping = mIntensifyManager.damping(mDrawingRect, distanceX, distanceY);
+        getParent().requestDisallowInterceptTouchEvent(damping.x != 0 || damping.y != 0);
         scrollBy(Math.round(damping.x), Math.round(damping.y));
     }
 

@@ -68,13 +68,6 @@ public class IntensifyImageManager {
 
     private volatile List<ImageDrawable> mDrawables = new ArrayList<>();
 
-    private static final int MAX_OVER_LENGTH = 300;
-
-    private static final int MAX_CACHE_SIZE = 0x960000;
-
-    /**
-     * 图片的初始的缩放类型
-     */
     private ScaleType mScaleType = ScaleType.FIT_CENTER;
 
     private State mState = State.NONE;
@@ -266,11 +259,6 @@ public class IntensifyImageManager {
         return 1f * mImageArea.width() / mImage.mImageWidth;
     }
 
-    /**
-     * 按照ScaleType类型的放大倍数
-     *
-     * @return
-     */
     public float getBaseScale() {
         return mBaseScale;
     }
@@ -330,41 +318,35 @@ public class IntensifyImageManager {
     public Float2 damping(Rect screen, float distanceX, float distanceY) {
         float dx = distanceX, dy = distanceY;
         if (dx < 0) {
-            if (screen.left <= mImageArea.left) dx = 0;
+            if (screen.left <= Math.round(mImageArea.left)) dx = 0;
             else if (screen.left + dx < mImageArea.left) {
                 dx = mImageArea.left - screen.left;
             }
         } else {
-            if (screen.right >= mImageArea.right) dx = 0;
+            if (screen.right >= Math.round(mImageArea.right)) dx = 0;
             else if (screen.right + dx > mImageArea.right) {
                 dx = mImageArea.right - screen.right;
             }
         }
 
         if (dy < 0) {
-            if (screen.top <= mImageArea.top) dy = 0;
+            if (screen.top <= Math.round(mImageArea.top)) dy = 0;
             else if (screen.top + dy < mImageArea.top) {
                 dy = mImageArea.top - screen.top;
             }
-            Logger.d(TAG, "AAA" + screen.top + "/" + mImageArea.top);
         } else {
-            if (screen.bottom >= mImageArea.bottom) dy = 0;
+            if (screen.bottom >= Math.round(mImageArea.bottom)) dy = 0;
             else if (screen.bottom + dy > mImageArea.bottom) {
                 dy = mImageArea.bottom - screen.bottom;
             }
         }
 
-        Logger.d(TAG, "DX = " + dx + ",Dy=" + dy);
-
         return new Float2(dx, dy);
     }
 
-    public void transform(float scale, float focusX, float focusY) {
-        Logger.d(TAG, "Scale:" + scale);
+    public void scale(float scale, float focusX, float focusY) {
         mMatrix.setScale(scale, scale, focusX, focusY);
-        Logger.d(TAG, "Before:" + mImageArea);
         mMatrix.mapRect(mImageArea);
-        Logger.d(TAG, "After:" + mImageArea);
     }
 
     public void zoomScale(Rect drawingRect, float scale, float focusX, float focusY) {
@@ -382,25 +364,6 @@ public class IntensifyImageManager {
         mZoomAnimator.start();
     }
 
-    public Point scrollTo(Rect drawingRect, int x, int y) {
-        return new Point(Math.max(Math.min(x,
-                Math.round(mImageArea.width() - drawingRect.width())), 0),
-                Math.max(Math.min(y, Math.round(mImageArea.height() - drawingRect.height())), 0));
-    }
-
-    public Point scrollBy(Rect drawingRect, int distanceX, int distanceY) {
-        Point distance = new Point(distanceX, distanceY);
-        if (mImageArea.left > drawingRect.left || mImageArea.right < drawingRect.right) {
-            distance.x = 0;
-        }
-
-        if (mImageArea.top > drawingRect.top || mImageArea.bottom < drawingRect.bottom) {
-            distance.y = 0;
-        }
-
-        return distance;
-    }
-
     private void requestInvalidate() {
         if (mCallback != null) {
             mCallback.onRequestInvalidate();
@@ -408,8 +371,6 @@ public class IntensifyImageManager {
     }
 
     public List<ImageDrawable> getImageDrawables(@NonNull Rect drawingRect) {
-        Logger.d(TAG, "getImageDrawables:" + mImageArea);
-
         if (Utils.isEmpty(drawingRect) || isNeedPrepare(drawingRect)) {
             return Collections.emptyList();
         }
@@ -421,7 +382,6 @@ public class IntensifyImageManager {
 
         ArrayList<ImageDrawable> drawables = new ArrayList<>(mDrawables);
 
-        Logger.d(TAG, "ImageRect= " + mImageArea);
         drawables.add(0, new ImageDrawable(mImage.mImageCache,
                 bitmapRect(mImage.mImageCache), Utils.round(mImageArea)));
 
@@ -465,28 +425,10 @@ public class IntensifyImageManager {
         return new Rect(0, 0, bitmap.getWidth(), bitmap.getHeight());
     }
 
-    public static Rect blockRect(int x, int y, int size) {
-        return new Rect(x * size, y * size, (x + 1) * size, (y + 1) * size);
-    }
-
-    public static Rect block(int x, int y, int size) {
-        return new Rect(x * size, y * size, x * size + size, y * size + size);
-    }
-
     public static int ceil(float value) {
         return (int) Math.ceil(value);
     }
 
-    public static int bitValue(int value) {
-        return value == 0 ? 0 : 1;
-    }
-
-    /**
-     * 查看{@link Utils#getSampleSize(int)}
-     *
-     * @param size
-     * @return
-     */
     public static int getSampleSize(float size) {
         return Utils.getSampleSize(Math.round(size));
     }
@@ -547,7 +489,8 @@ public class IntensifyImageManager {
             }
 
             mImageCaches = new IntensifyImageCache(5,
-                    mDisplayMetrics.widthPixels * mDisplayMetrics.heightPixels << 4, BLOCK_SIZE, mImageRegion);
+                    mDisplayMetrics.widthPixels * mDisplayMetrics.heightPixels << 4,
+                    BLOCK_SIZE, mImageRegion);
         }
 
         public void release() {
