@@ -9,7 +9,7 @@ import android.graphics.Rect;
 /**
  * Created by felix on 16/5/18.
  */
-public class IntensifyImageCache extends IntensifyCache<Integer, IntensifyImageCache.ImageCache, Void> {
+class IntensifyImageCache extends IntensifyCache<Integer, IntensifyImageCache.ImageCache, Void> {
 
     private int mSubMaxSize;
     private Rect mOriginalRect;

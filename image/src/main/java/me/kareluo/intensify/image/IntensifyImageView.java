@@ -1,12 +1,15 @@
 package me.kareluo.intensify.image;
 
 import android.content.Context;
+import android.content.res.TypedArray;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
 import android.renderscript.Float2;
 import android.util.AttributeSet;
 import android.view.View;
@@ -70,6 +73,14 @@ public class IntensifyImageView extends View implements IntensifyImage,
 
     protected void initialize(Context context, AttributeSet attrs, int defStyleAttr) {
         mDelegate = new IntensifyImageDelegate(getResources().getDisplayMetrics(), this);
+
+        TypedArray a = context.obtainStyledAttributes(attrs, R.styleable.IntensifyImageView);
+
+        mDelegate.setScaleType(ScaleType.valueOf(
+                a.getInt(R.styleable.IntensifyImageView_scaleType, ScaleType.FIT_CENTER.nativeInt)));
+
+        a.recycle();
+
         mPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
         mPaint.setColor(Color.GREEN);
         mPaint.setStrokeWidth(1f);

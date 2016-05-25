@@ -18,6 +18,7 @@ import android.support.annotation.NonNull;
 import android.support.annotation.WorkerThread;
 import android.support.v4.util.Pair;
 import android.util.DisplayMetrics;
+import android.util.Log;
 import android.view.animation.DecelerateInterpolator;
 
 import java.io.File;
@@ -33,7 +34,7 @@ import static me.kareluo.intensify.image.IntensifyImage.ScaleType;
 /**
  * Created by felix on 15/12/17.
  */
-public class IntensifyImageDelegate {
+class IntensifyImageDelegate {
     private static final String TAG = "IntensifyImageDelegate";
 
     private DisplayMetrics mDisplayMetrics;
@@ -68,7 +69,7 @@ public class IntensifyImageDelegate {
 
     private State mState = State.NONE;
 
-    private static final int[] SCALE_STEP = {1, 3, 9, 1};
+    private static final int[] SCALE_STEP = {1, 3};
 
     private static final int BLOCK_SIZE = 300;
 
@@ -78,6 +79,7 @@ public class IntensifyImageDelegate {
     private static final int MSG_IMAGE_SCALE = 3;
     private static final int MSG_IMAGE_DRAW = 4;
     private static final int MSG_IMAGE_RELEASE = 5;
+    private static final int MSG_QUIT = 6;
 
     private enum State {
         NONE, SRC, LOAD, INIT, FREE
@@ -104,10 +106,8 @@ public class IntensifyImageDelegate {
     }
 
     public void onDetached() {
-        mHandlerThread.quit();
-        mHandlerThread = null;
         mHandler.removeCallbacksAndMessages(null);
-        sendMessage(MSG_IMAGE_RELEASE);
+        sendMessage(MSG_QUIT);
     }
 
     public void load(String path) {
@@ -260,15 +260,19 @@ public class IntensifyImageDelegate {
         float v;
 
         if (mIsVertical) {
-
             v = mImageArea.width() / drawingRect.width();
         } else {
-
             v = mImageArea.height() / drawingRect.height();
         }
 
-        return SCALE_STEP[Math.abs(Arrays.binarySearch(
-                SCALE_STEP, (int) Math.round(Math.floor(v))) + 1) % SCALE_STEP.length] / v;
+        // + 0.1 避免.99999型误差
+        int index = Math.abs(Arrays.binarySearch(
+                SCALE_STEP, (int) Math.round(Math.floor(v + 0.1))) + 1);
+
+        if (index >= SCALE_STEP.length) {
+            return mBaseScale / getScale();
+        }
+        return SCALE_STEP[index % SCALE_STEP.length] / v;
     }
 
     /**
@@ -285,9 +289,11 @@ public class IntensifyImageDelegate {
 
     public void setScaleType(ScaleType scaleType) {
         mScaleType = scaleType;
-        mState = State.INIT;
-        mImage.mCurrentState = null;
-        requestInvalidate();
+        if (mState.ordinal() >= State.INIT.ordinal()) {
+            mState = State.INIT;
+            mImage.mCurrentState = null;
+            requestInvalidate();
+        }
     }
 
     public int getWidth() {
@@ -415,10 +421,6 @@ public class IntensifyImageDelegate {
 
     public static Rect bitmapRect(Bitmap bitmap) {
         return new Rect(0, 0, bitmap.getWidth(), bitmap.getHeight());
-    }
-
-    public static int ceil(float value) {
-        return (int) Math.ceil(value);
     }
 
     public static int getSampleSize(float size) {
@@ -566,6 +568,14 @@ public class IntensifyImageDelegate {
                     break;
                 case MSG_IMAGE_RELEASE:
                     release();
+                    break;
+                case MSG_QUIT:
+                    release();
+                    try {
+                        getLooper().quit();
+                    } catch (Throwable throwable) {
+                        Log.w(TAG, throwable);
+                    }
                     break;
             }
         }

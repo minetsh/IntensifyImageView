@@ -5,7 +5,7 @@ import android.util.Log;
 /**
  * Created by felix on 15/12/25.
  */
-public class Logger {
+class Logger {
     public static final boolean DEBUG = true;
 
     public static void i(String tag, String msg) {

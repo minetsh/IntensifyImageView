@@ -50,17 +50,13 @@ public interface IntensifyImage {
 
         FIT_AUTO(1),
 
-        FIT_START(2),
-
-        FIT_CENTER(3),
-
-        FIT_END(4);
+        FIT_CENTER(2);
 
         ScaleType(int ni) {
             nativeInt = ni;
         }
 
-        ScaleType valueOf(int value) {
+        static ScaleType valueOf(int value) {
             if (value < 0 || value >= values().length) {
                 return NONE;
             }

@@ -4,6 +4,7 @@ import android.content.DialogInterface;
 import android.os.Bundle;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -12,7 +13,6 @@ import java.io.IOException;
 
 import me.kareluo.intensify.image.IntensifyImage;
 import me.kareluo.intensify.image.IntensifyImageView;
-import me.kareluo.intensify.image.Logger;
 
 /**
  * Created by felix on 15/12/25.
@@ -39,13 +39,13 @@ public class SinglePreviewActivity extends AppCompatActivity {
         try {
             mPictures = getAssets().list(PIC_DIR);
         } catch (IOException e) {
-            Logger.w(TAG, e);
+            Log.w(TAG, e);
         }
 
         try {
             mIntensifyImageView.setImage(getAssets().open(PIC_DIR + "/xingren.jpg"));
         } catch (IOException e) {
-            Logger.w(TAG, e);
+            Log.w(TAG, e);
         }
     }
 

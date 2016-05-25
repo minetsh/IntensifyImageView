@@ -4,13 +4,13 @@ import android.os.Bundle;
 import android.support.v4.view.PagerAdapter;
 import android.support.v4.view.ViewPager;
 import android.support.v7.app.AppCompatActivity;
+import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 
 import java.io.IOException;
 
 import me.kareluo.intensify.image.IntensifyImageView;
-import me.kareluo.intensify.image.Logger;
 
 /**
  * Created by felix on 16/5/18.
@@ -35,7 +35,7 @@ public class MultiPreviewActivity extends AppCompatActivity {
         try {
             mPictures = getAssets().list(PIC_DIR);
         } catch (IOException e) {
-            Logger.w(TAG, e);
+            Log.w(TAG, e);
         }
 
         mViewPager = (ViewPager) findViewById(R.id.vp_pager);
@@ -61,7 +61,7 @@ public class MultiPreviewActivity extends AppCompatActivity {
             try {
                 imageView.setImage(getAssets().open(PIC_DIR + "/" + mPictures[position]));
             } catch (IOException e) {
-                Logger.w(TAG, e);
+                Log.w(TAG, e);
             }
             container.addView(imageView);
             return imageView;

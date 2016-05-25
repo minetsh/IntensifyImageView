@@ -7,7 +7,11 @@ import android.support.annotation.NonNull;
 /**
  * Created by felix on 16/1/16.
  */
-public class Utils {
+class Utils {
+
+    private Utils() {
+
+    }
 
     public static void center(RectF rect, Rect frame) {
         rect.offset(frame.centerX() - rect.centerX(), frame.centerY() - rect.centerY());
@@ -108,11 +112,15 @@ public class Utils {
     public static Rect blocks(RectF rect, float size) {
         return new Rect(
                 floor(rect.left / size), floor(rect.top / size),
-                IntensifyImageDelegate.ceil(rect.right / size), IntensifyImageDelegate.ceil(rect.bottom / size)
+                ceil(rect.right / size), ceil(rect.bottom / size)
         );
     }
 
     public static int floor(float value) {
         return (int) Math.floor(value);
+    }
+
+    public static int ceil(float value) {
+        return (int) Math.ceil(value);
     }
 }
