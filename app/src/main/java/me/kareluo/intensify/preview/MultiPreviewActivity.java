@@ -10,6 +10,7 @@ import android.view.ViewGroup;
 
 import java.io.IOException;
 
+import me.kareluo.intensify.image.IntensifyImage;
 import me.kareluo.intensify.image.IntensifyImageView;
 
 /**
@@ -58,6 +59,7 @@ public class MultiPreviewActivity extends AppCompatActivity {
         @Override
         public Object instantiateItem(ViewGroup container, int position) {
             IntensifyImageView imageView = new IntensifyImageView(container.getContext());
+            imageView.setScaleType(IntensifyImage.ScaleType.FIT_AUTO);
             try {
                 imageView.setImage(getAssets().open(PIC_DIR + "/" + mPictures[position]));
             } catch (IOException e) {
