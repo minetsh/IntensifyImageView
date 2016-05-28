@@ -2,7 +2,6 @@ package me.kareluo.intensify.image;
 
 import android.graphics.Rect;
 import android.graphics.RectF;
-import android.support.annotation.NonNull;
 
 /**
  * Created by felix on 16/1/16.
@@ -60,7 +59,7 @@ class Utils {
                 Math.round(rect.right), Math.round(rect.bottom));
     }
 
-    public static RectF evaluate(float fraction, RectF startValue, RectF endValue, @NonNull RectF reuseRect) {
+    public static RectF evaluate(float fraction, RectF startValue, RectF endValue, RectF reuseRect) {
         float left = startValue.left + (endValue.left - startValue.left) * fraction;
         float top = startValue.top + (endValue.top - startValue.top) * fraction;
         float right = startValue.right + (endValue.right - startValue.right) * fraction;

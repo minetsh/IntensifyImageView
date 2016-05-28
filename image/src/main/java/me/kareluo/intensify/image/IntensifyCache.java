@@ -1,6 +1,7 @@
 package me.kareluo.intensify.image;
 
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -63,6 +64,10 @@ public class IntensifyCache<K, V, L> {
      * created by {@code #create}. If a value was returned, it is moved to the
      * head of the queue. This returns null if a value is not cached and cannot
      * be created.
+     *
+     * @param key the key of the value.
+     *
+     * @return the value of the key.
      */
     public final V get(K key) {
         if (key == null) {
@@ -156,6 +161,8 @@ public class IntensifyCache<K, V, L> {
      * Caches {@code value} for {@code key}. The value is moved to the head of
      * the queue.
      *
+     * @param key   the key of the value.
+     * @param value the value of the key.
      * @return the previous value mapped by {@code key}.
      */
     public final V put(K key, V value) {
@@ -217,6 +224,7 @@ public class IntensifyCache<K, V, L> {
     /**
      * Removes the entry for {@code key} if it exists.
      *
+     * @param key the key of the value to remove.
      * @return the previous value mapped by {@code key}.
      */
     public final V remove(K key) {
@@ -244,12 +252,13 @@ public class IntensifyCache<K, V, L> {
      * invoked when a value is evicted to make space, removed by a call to
      * {@link #remove}, or replaced by a call to {@link #put}. The default
      * implementation does nothing.
-     * <p/>
-     * <p>The method is called without synchronization: other threads may
+     * The method is called without synchronization: other threads may
      * access the cache while this method is executing.
      *
      * @param evicted  true if the entry is being removed to make space, false
      *                 if the removal was caused by a {@link #put} or {@link #remove}.
+     * @param key the key of the value to remove.
+     * @param oldValue the oldValue to be replaced.
      * @param newValue the new value for {@code key}, if it exists. If non-null,
      *                 this removal was caused by a {@link #put}. Otherwise it was caused by
      *                 an eviction or a {@link #remove}.
@@ -261,16 +270,17 @@ public class IntensifyCache<K, V, L> {
      * Called after a cache miss to compute a value for the corresponding key.
      * Returns the computed value or null if no value can be computed. The
      * default implementation returns null.
-     * <p/>
-     * <p>The method is called without synchronization: other threads may
+     * The method is called without synchronization: other threads may
      * access the cache while this method is executing.
-     * <p/>
-     * <p>If a value for {@code key} exists in the cache when this method
+     * If a value for {@code key} exists in the cache when this method
      * returns, the created value will be released with {@link #entryRemoved}
      * and discarded. This can occur when multiple threads request the same key
      * at the same time (causing multiple values to be created), or when one
      * thread calls {@link #put} while another is creating a value for the same
      * key.
+     *
+     * @param key the key of the value.
+     * @return the value of the key.
      */
     protected V create(K key) {
         return null;
@@ -288,8 +298,12 @@ public class IntensifyCache<K, V, L> {
      * Returns the size of the entry for {@code key} and {@code value} in
      * user-defined units.  The default implementation returns 1 so that size
      * is the number of entries and max size is the maximum number of entries.
-     * <p/>
-     * <p>An entry's size must not change while it is in the cache.
+     * An entry's size must not change while it is in the cache.
+     *
+     * @param key the key of the value.
+     * @param value the value of the key.
+     *
+     * @return the size of the key, default size is 1.
      */
     protected int sizeOf(K key, V value) {
         return 1;
@@ -306,6 +320,8 @@ public class IntensifyCache<K, V, L> {
      * For caches that do not override {@link #sizeOf}, this returns the number
      * of entries in the cache. For all other caches, this returns the sum of
      * the sizes of the entries in this cache.
+     *
+     * @return the size.
      */
     public synchronized final int size() {
         return size;
@@ -315,6 +331,8 @@ public class IntensifyCache<K, V, L> {
      * For caches that do not override {@link #sizeOf}, this returns the maximum
      * number of entries in the cache. For all other caches, this returns the
      * maximum sum of the sizes of the entries in this cache.
+     *
+     * @return the maxSize;
      */
     public synchronized final int maxSize() {
         return maxSize;
@@ -323,6 +341,8 @@ public class IntensifyCache<K, V, L> {
     /**
      * Returns the number of times {@link #get} returned a value that was
      * already present in the cache.
+     *
+     * @return the hitCount.
      */
     public synchronized final int hitCount() {
         return hitCount;
@@ -331,6 +351,8 @@ public class IntensifyCache<K, V, L> {
     /**
      * Returns the number of times {@link #get} returned null or required a new
      * value to be created.
+     *
+     * @return the missCount.
      */
     public synchronized final int missCount() {
         return missCount;
@@ -338,6 +360,8 @@ public class IntensifyCache<K, V, L> {
 
     /**
      * Returns the number of times {@link #create(Object)} returned a value.
+     *
+     * @return the createCount.
      */
     public synchronized final int createCount() {
         return createCount;
@@ -345,6 +369,8 @@ public class IntensifyCache<K, V, L> {
 
     /**
      * Returns the number of times {@link #put} was called.
+     *
+     * @return the putCount.
      */
     public synchronized final int putCount() {
         return putCount;
@@ -352,6 +378,8 @@ public class IntensifyCache<K, V, L> {
 
     /**
      * Returns the number of values that have been evicted.
+     *
+     * @return the evictionCount.
      */
     public synchronized final int evictionCount() {
         return evictionCount;
@@ -360,6 +388,8 @@ public class IntensifyCache<K, V, L> {
     /**
      * Returns a copy of the current contents of the cache, ordered from least
      * recently accessed to most recently accessed.
+     *
+     * @return the cache map.
      */
     public synchronized final Map<K, V> snapshot() {
         return new LinkedHashMap<K, V>(map);
@@ -369,7 +399,7 @@ public class IntensifyCache<K, V, L> {
     public synchronized final String toString() {
         int accesses = hitCount + missCount;
         int hitPercent = accesses != 0 ? (100 * hitCount / accesses) : 0;
-        return String.format("LruCache[maxSize=%d,hits=%d,misses=%d,hitRate=%d%%]",
+        return String.format(Locale.ROOT, "LruCache[maxSize=%d,hits=%d,misses=%d,hitRate=%d%%]",
                 maxSize, hitCount, missCount, hitPercent);
     }
 }

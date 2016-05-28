@@ -14,11 +14,9 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.Message;
-import android.support.annotation.NonNull;
-import android.support.annotation.WorkerThread;
-import android.support.v4.util.Pair;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.util.Pair;
 import android.view.animation.DecelerateInterpolator;
 
 import java.io.File;
@@ -85,7 +83,7 @@ class IntensifyImageDelegate {
         NONE, SRC, LOAD, INIT, FREE
     }
 
-    public IntensifyImageDelegate(DisplayMetrics metrics, @NonNull Callback callback) {
+    public IntensifyImageDelegate(DisplayMetrics metrics, Callback callback) {
         mDisplayMetrics = metrics;
         mCallback = callback;
         mHandlerThread = new HandlerThread(TAG);
@@ -128,20 +126,20 @@ class IntensifyImageDelegate {
         sendMessage(MSG_IMAGE_SRC, decoder);
     }
 
-    @WorkerThread
+    //@WorkerThread
     private void prepare(ImageDecoder decoder) {
         mImage = new Image(decoder);
         mState = State.SRC;
     }
 
-    @WorkerThread
+    //@WorkerThread
     private void load() {
         mImage.mImageWidth = mImage.mImageRegion.getWidth();
         mImage.mImageHeight = mImage.mImageRegion.getHeight();
         mState = State.LOAD;
     }
 
-    @WorkerThread
+    //@WorkerThread
     private void initialize(Rect drawingRect) {
         if (Utils.isEmpty(drawingRect)) return;
 
@@ -158,7 +156,7 @@ class IntensifyImageDelegate {
         initScaleType(drawingRect);
     }
 
-    @WorkerThread
+    //@WorkerThread
     private void initScaleType(Rect drawingRect) {
         mImageArea.set(0, 0, mImage.mImageWidth, mImage.mImageHeight);
         if (mScaleType == ScaleType.NONE) {
@@ -197,7 +195,7 @@ class IntensifyImageDelegate {
         mState = State.FREE;
     }
 
-    @WorkerThread
+    //@WorkerThread
     private void prepareDraw(Rect rect) {
         float curScale = getScale();
         int sampleSize = getSampleSize(1f / curScale);
@@ -237,7 +235,7 @@ class IntensifyImageDelegate {
         mImage.mCurrentState = Pair.create(new RectF(mImageArea), new Rect(rect));
     }
 
-    @WorkerThread
+    //@WorkerThread
     private void release() {
         if (mImage != null) {
             mImage.release();
@@ -254,7 +252,7 @@ class IntensifyImageDelegate {
         return mBaseScale;
     }
 
-    public float getNextStepScale(@NonNull Rect drawingRect) {
+    public float getNextStepScale(Rect drawingRect) {
         if (Utils.isEmpty(drawingRect)) return mBaseScale;
 
         float v;
@@ -368,7 +366,7 @@ class IntensifyImageDelegate {
         }
     }
 
-    public List<ImageDrawable> getImageDrawables(@NonNull Rect drawingRect) {
+    public List<ImageDrawable> getImageDrawables(Rect drawingRect) {
         if (Utils.isEmpty(drawingRect) || isNeedPrepare(drawingRect)) {
             return Collections.emptyList();
         }
