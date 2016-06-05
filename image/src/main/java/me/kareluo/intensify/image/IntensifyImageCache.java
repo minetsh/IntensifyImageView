@@ -54,9 +54,9 @@ class IntensifyImageCache extends IntensifyCache<Integer, IntensifyImageCache.Im
                 }
             }
             if (level > 1) {
-                ImageCache imageCache = IntensifyImageCache.this.justGet(level - 1);
+                ImageCache imageCache = IntensifyImageCache.this.justGet(level >> 1);
                 if (imageCache != null) {
-                    return imageCache.alternative(key, level - 1);
+                    return imageCache.alternative(key, level >> 1);
                 }
             }
             return null;

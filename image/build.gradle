@@ -1,6 +1,6 @@
 apply plugin: 'com.android.library'
-apply plugin: 'com.github.dcendents.android-maven'
 apply plugin: 'com.jfrog.bintray'
+apply plugin: 'com.github.dcendents.android-maven'
 
 version = "1.0.0"
 
@@ -30,7 +30,7 @@ dependencies {
     testCompile 'junit:junit:4.12'
 }
 
-def webSiteUrl = 'https://github.com/kareluo/AndroidPicturePreview'
+def siteUrl = 'https://github.com/kareluo/AndroidPicturePreview'
 def gitUrl = 'https://github.com/kareluo/AndroidPicturePreview.git'
 
 group = "me.kareluo.intensify"
@@ -44,7 +44,7 @@ install {
                 packaging 'aar'
 
                 name 'Picture Preview Lib，用于显示原图级别的图片预览库'
-                url webSiteUrl
+                url siteUrl
 
                 licenses {
                     license {
@@ -55,7 +55,7 @@ install {
 
                 developers {
                     developer {
-                        id 'kareluo'        //填写的一些基本信息
+                        id 'kareluo'
                         name 'Felix'
                         email 'kareluo76@gmail.com'
                     }
@@ -64,7 +64,7 @@ install {
                 scm {
                     connection gitUrl
                     developerConnection gitUrl
-                    url webSiteUrl
+                    url siteUrl
                 }
             }
         }
@@ -78,7 +78,7 @@ task sourcesJar(type: Jar) {
 
 task javadoc(type: Javadoc) {
     source = android.sourceSets.main.java.srcDirs
-    classpath += project.files(configurations.compile.files, android.getBootClasspath().join(File.pathSeparator))
+    classpath += project.files(android.getBootClasspath().join(File.pathSeparator))
 }
 
 task javadocJar(type: Jar, dependsOn: javadoc) {
@@ -99,8 +99,8 @@ bintray {
     configurations = ['archives']
     pkg {
         repo = "maven"
-        name = "me.kareluo.intensify:image"    //发布到JCenter上的项目名字
-        websiteUrl = webSiteUrl
+        name = "me.kareluo.intensify:image"
+        websiteUrl = siteUrl
         vcsUrl = gitUrl
         licenses = ["Apache-2.0"]
         publish = true

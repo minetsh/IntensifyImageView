@@ -572,7 +572,7 @@ class IntensifyImageDelegate {
                     try {
                         getLooper().quit();
                     } catch (Throwable throwable) {
-                        Log.w(TAG, throwable);
+                        Logger.w(TAG, throwable);
                     }
                     break;
             }
