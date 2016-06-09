@@ -8,7 +8,7 @@
 # Demo
 安装 [apk](https://www.pgyer.com/iimg) 文件预览效果，或者通过下面二维码去下载安装：
 
-![demo apk 文件地址二维码](/screenshot/iimg)
+![demo apk 文件地址二维码](/screenshot/iimg.png)
 
 # Usage
 
