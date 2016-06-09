@@ -5,11 +5,16 @@
 |:---:|:---:|:---:|
 |单图预览|多图切换|ScaleType|
 
+# Demo
+安装 [apk](https://www.pgyer.com/iimg) 文件预览效果，或者通过下面二维码去下载安装：
+
+![demo apk 文件地址二维码](/screenshot/iimg)
+
 # Usage
 
 Use Gradle:
 
-```
+``` groovy
 dependencies {
    compile 'me.kareluo.intensify:image:1.0.0'
 }
@@ -17,7 +22,7 @@ dependencies {
 
 Or Maven:
 
-```
+``` xml
 <dependency>
   <groupId>me.kareluo.intensify</groupId>
   <artifactId>image</artifactId>
@@ -30,7 +35,7 @@ Or Maven:
 
 布局文件如下，width和height都要使用match_parent：
 
-```
+``` xml
 <me.kareluo.intensify.image.IntensifyImageView
    android:id="@+id/intensify_image"
    android:layout_width="match_parent"
@@ -40,7 +45,7 @@ Or Maven:
 
 代码中可以通过以下三种方式设置图片资源：
 
-```   
+``` java
 IntensifyImageView imageView = (IntensifyImageView)findViewById(R.id.intensify_image);
 
 // 通过流设置
@@ -58,8 +63,8 @@ imageView.setImage(String path);
 
 # License
 
-```
-Copyright 2015 kareluo
+``` license
+Copyright 2015 kareluo.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
