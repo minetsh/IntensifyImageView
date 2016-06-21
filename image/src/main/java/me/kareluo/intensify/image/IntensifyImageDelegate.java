@@ -15,7 +15,6 @@ import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.Message;
 import android.util.DisplayMetrics;
-import android.util.Log;
 import android.util.Pair;
 import android.view.animation.DecelerateInterpolator;
 
@@ -394,7 +393,7 @@ class IntensifyImageDelegate {
     }
 
     public void zoomScale(Rect drawingRect, float scale, float focusX, float focusY) {
-        if (Utils.isEmpty(drawingRect)) return;
+        if (mState.ordinal() < State.FREE.ordinal() || Utils.isEmpty(drawingRect)) return;
         if (mZoomAnimator.isRunning()) mZoomAnimator.cancel();
         mStartRect.set(mImageArea);
 
@@ -411,6 +410,12 @@ class IntensifyImageDelegate {
     private void requestInvalidate() {
         if (mCallback != null) {
             mCallback.onRequestInvalidate();
+        }
+    }
+
+    private void requestAwakenScrollBars() {
+        if (mCallback != null) {
+            mCallback.onRequestAwakenScrollBars();
         }
     }
 
@@ -485,6 +490,7 @@ class IntensifyImageDelegate {
             Float value = (Float) animation.getAnimatedValue();
             Utils.evaluate(value, mStartRect, mEndRect, mImageArea);
             requestInvalidate();
+            requestAwakenScrollBars();
         }
     }
 
@@ -581,6 +587,8 @@ class IntensifyImageDelegate {
 
     public interface Callback {
         void onRequestInvalidate();
+
+        boolean onRequestAwakenScrollBars();
     }
 
     private class IntensifyImageHandler extends Handler {

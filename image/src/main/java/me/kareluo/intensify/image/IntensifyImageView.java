@@ -16,7 +16,6 @@ import java.io.File;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 import me.kareluo.intensify.image.IntensifyImageDelegate.ImageDrawable;
 
@@ -181,7 +180,7 @@ public class IntensifyImageView extends View implements IntensifyImage,
     @Override
     public void addScale(float scale, float focusX, float focusY) {
         mDelegate.scale(scale, focusX + getScrollX(), focusY + getScrollY());
-        requestInvalidate();
+        postInvalidate();
     }
 
     @Override
@@ -250,7 +249,7 @@ public class IntensifyImageView extends View implements IntensifyImage,
                     Math.round(Math.max(imageArea.bottom - mDrawingRect.height(), mDrawingRect.top)),
                     100, 100);
             vFling = true;
-            requestInvalidate();
+            postInvalidate();
         }
     }
 
@@ -336,11 +335,11 @@ public class IntensifyImageView extends View implements IntensifyImage,
 
     @Override
     public void onRequestInvalidate() {
-        requestInvalidate();
+        postInvalidate();
     }
 
-    public void requestInvalidate() {
-        postInvalidate();
-        awakenScrollBars();
+    @Override
+    public boolean onRequestAwakenScrollBars() {
+        return awakenScrollBars();
     }
 }
