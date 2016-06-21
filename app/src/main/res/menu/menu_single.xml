@@ -16,7 +16,7 @@
 
     <item
         android:id="@+id/menu_scale_type"
-        android:title="@string/scaletype"
+        android:title="@string/scale_type"
         app:showAsAction="never" />
 
     <item

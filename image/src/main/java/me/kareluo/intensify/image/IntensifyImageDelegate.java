@@ -294,12 +294,60 @@ class IntensifyImageDelegate {
         }
     }
 
+    /**
+     * 图像原始宽度
+     *
+     * @return 图像原始宽度
+     */
     public int getWidth() {
         return mImage != null ? mImage.mImageWidth : 0;
     }
 
+    /**
+     * 图像原始高度
+     *
+     * @return 图像原始高度
+     */
     public int getHeight() {
         return mImage != null ? mImage.mImageHeight : 0;
+    }
+
+    /**
+     * 图像宽度
+     *
+     * @return 图像宽度
+     */
+    public int getImageWidth() {
+        return Math.round(mImageArea.width());
+    }
+
+    /**
+     * 图像高度
+     *
+     * @return 图像高度
+     */
+    public int getImageHeight() {
+        return Math.round(mImageArea.height());
+    }
+
+    /**
+     * 返回显示区域相对图像区域的X坐标偏移
+     *
+     * @param scrollX 滚动X坐标
+     * @return 偏移值
+     */
+    public int getHorizontalOffset(int scrollX) {
+        return Math.round(scrollX - mImageArea.left);
+    }
+
+    /**
+     * 返回显示区域相对图像区域的Y坐标偏移
+     *
+     * @param scrollY 滚动Y坐标
+     * @return 偏移值
+     */
+    public int getVerticalOffset(int scrollY) {
+        return Math.round(scrollY - mImageArea.top);
     }
 
     public Point damping(Rect screen, float distanceX, float distanceY) {

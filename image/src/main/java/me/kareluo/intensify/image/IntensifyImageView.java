@@ -8,9 +8,6 @@ import android.graphics.Paint;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.RectF;
-import android.graphics.drawable.BitmapDrawable;
-import android.graphics.drawable.Drawable;
-import android.renderscript.Float2;
 import android.util.AttributeSet;
 import android.view.View;
 import android.widget.OverScroller;
@@ -19,6 +16,7 @@ import java.io.File;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import me.kareluo.intensify.image.IntensifyImageDelegate.ImageDrawable;
 
@@ -54,7 +52,7 @@ public class IntensifyImageView extends View implements IntensifyImage,
 
     private OnLongPressListener mOnLongPressListener;
 
-    private volatile boolean fling = false;
+    private volatile boolean vFling = false;
 
     private static final boolean DEBUG = false;
 
@@ -183,7 +181,7 @@ public class IntensifyImageView extends View implements IntensifyImage,
     @Override
     public void addScale(float scale, float focusX, float focusY) {
         mDelegate.scale(scale, focusX + getScrollX(), focusY + getScrollY());
-        postInvalidate();
+        requestInvalidate();
     }
 
     @Override
@@ -200,12 +198,32 @@ public class IntensifyImageView extends View implements IntensifyImage,
             scrollTo(mScroller.getCurrX(), mScroller.getCurrY());
             postInvalidate();
         } else {
-            if (fling) {
+            if (vFling) {
                 getDrawingRect(mDrawingRect);
                 mDelegate.zoomHoming(mDrawingRect);
-                fling = false;
+                vFling = false;
             }
         }
+    }
+
+    @Override
+    protected int computeHorizontalScrollOffset() {
+        return mDelegate.getHorizontalOffset(getScrollX());
+    }
+
+    @Override
+    protected int computeHorizontalScrollRange() {
+        return mDelegate.getImageWidth();
+    }
+
+    @Override
+    protected int computeVerticalScrollOffset() {
+        return mDelegate.getVerticalOffset(getScrollY());
+    }
+
+    @Override
+    protected int computeVerticalScrollRange() {
+        return mDelegate.getImageHeight();
     }
 
     @Override
@@ -231,8 +249,8 @@ public class IntensifyImageView extends View implements IntensifyImage,
                     Math.round(Math.min(imageArea.top, mDrawingRect.top)),
                     Math.round(Math.max(imageArea.bottom - mDrawingRect.height(), mDrawingRect.top)),
                     100, 100);
-            fling = true;
-            postInvalidate();
+            vFling = true;
+            requestInvalidate();
         }
     }
 
@@ -318,6 +336,11 @@ public class IntensifyImageView extends View implements IntensifyImage,
 
     @Override
     public void onRequestInvalidate() {
+        requestInvalidate();
+    }
+
+    public void requestInvalidate() {
         postInvalidate();
+        awakenScrollBars();
     }
 }
