@@ -85,7 +85,7 @@ class IntensifyImageDelegate {
 
     public IntensifyImageDelegate(DisplayMetrics metrics, Callback callback) {
         mDisplayMetrics = metrics;
-        mCallback = callback;
+        mCallback = Utils.requireNonNull(callback);
         mHandlerThread = new HandlerThread(TAG);
         mHandlerThread.start();
         mHandler = new IntensifyImageHandler(mHandlerThread.getLooper());
@@ -131,6 +131,7 @@ class IntensifyImageDelegate {
         mImage = new Image(decoder);
         mImageArea.setEmpty();
         mState = State.SRC;
+        load();
     }
 
     //@WorkerThread
@@ -205,7 +206,7 @@ class IntensifyImageDelegate {
     private void prepareDraw(Rect rect) {
         float curScale = getScale();
         int sampleSize = getSampleSize(1f / curScale);
-        mDrawables.clear();
+
         if (mImage.mImageSampleSize > sampleSize) {
             RectF drawingRect = new RectF(rect);
 
@@ -236,8 +237,11 @@ class IntensifyImageDelegate {
                 }
             }
 
+            mDrawables.clear();
             mDrawables.addAll(drawables);
-        }
+
+        } else mDrawables.clear();
+
         mImage.mCurrentState = Pair.create(new RectF(mImageArea), new Rect(rect));
     }
 
@@ -430,18 +434,14 @@ class IntensifyImageDelegate {
     }
 
     private void requestInvalidate() {
-        if (mCallback != null) {
-            mCallback.onRequestInvalidate();
-        }
+        mCallback.onRequestInvalidate();
     }
 
     private void requestAwakenScrollBars() {
-        if (mCallback != null) {
-            mCallback.onRequestAwakenScrollBars();
-        }
+        mCallback.onRequestAwakenScrollBars();
     }
 
-    public List<ImageDrawable> getImageDrawables(Rect drawingRect) {
+    public List<ImageDrawable> obtainImageDrawables(Rect drawingRect) {
         if (Utils.isEmpty(drawingRect) || isNeedPrepare(drawingRect)) {
             return Collections.emptyList();
         }
@@ -451,14 +451,24 @@ class IntensifyImageDelegate {
             sendMessage(MSG_IMAGE_DRAW, drawingRect);
         }
 
-        ArrayList<ImageDrawable> drawables = new ArrayList<>(mDrawables);
-
-        drawables.add(0, new ImageDrawable(mImage.mImageCache,
-                bitmapRect(mImage.mImageCache), Utils.round(mImageArea)));
-
+        ArrayList<ImageDrawable> drawables = obtainBaseDrawables();
+        drawables.addAll(mDrawables);
         return drawables;
     }
 
+    public ArrayList<ImageDrawable> obtainBaseDrawables() {
+        ArrayList<ImageDrawable> drawables = new ArrayList<>();
+        drawables.add(new ImageDrawable(mImage.mImageCache,
+                bitmapRect(mImage.mImageCache), Utils.round(mImageArea)));
+        return drawables;
+    }
+
+    /**
+     * 判断是否需要更新状态
+     *
+     * @param drawingRect 绘制区域
+     * @return true 需要准备
+     */
     public boolean isNeedPrepare(Rect drawingRect) {
         switch (mState) {
             case NONE:
@@ -477,15 +487,11 @@ class IntensifyImageDelegate {
     }
 
     private void sendMessage(int what) {
-        if (mHandler != null) {
-            mHandler.sendEmptyMessage(what);
-        }
+        mHandler.sendEmptyMessage(what);
     }
 
     private void sendMessage(int what, Object obj) {
-        if (mHandler != null) {
-            mHandler.obtainMessage(what, obj).sendToTarget();
-        }
+        mHandler.obtainMessage(what, obj).sendToTarget();
     }
 
     public RectF getImageArea() {

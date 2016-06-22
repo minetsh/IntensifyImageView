@@ -123,8 +123,13 @@ class Utils {
         return (int) Math.ceil(value);
     }
 
-    public static boolean isNear(RectF a, RectF b, float dst) {
-        return Math.abs(a.left - b.left) <= dst && Math.abs(a.top - b.top) <= dst
-                && Math.abs(a.right - b.right) <= dst && Math.abs(a.bottom - b.bottom) <= dst;
+    /**
+     * Returns {@code o} if non-null, or throws {@code NullPointerException}.
+     */
+    public static <T> T requireNonNull(T o) {
+        if (o == null) {
+            throw new NullPointerException();
+        }
+        return o;
     }
 }
