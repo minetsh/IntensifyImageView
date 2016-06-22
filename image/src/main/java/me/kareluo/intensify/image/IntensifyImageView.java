@@ -76,6 +76,9 @@ public class IntensifyImageView extends View implements IntensifyImage,
         mDelegate.setScaleType(ScaleType.valueOf(
                 a.getInt(R.styleable.IntensifyImageView_scaleType, ScaleType.FIT_CENTER.nativeInt)));
 
+        mDelegate.setAnimateScaleType(
+                a.getBoolean(R.styleable.IntensifyImageView_animateScaleType, false));
+
         a.recycle();
 
         mPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);

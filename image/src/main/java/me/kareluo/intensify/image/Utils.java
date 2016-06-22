@@ -122,4 +122,9 @@ class Utils {
     public static int ceil(float value) {
         return (int) Math.ceil(value);
     }
+
+    public static boolean isNear(RectF a, RectF b, float dst) {
+        return Math.abs(a.left - b.left) <= dst && Math.abs(a.top - b.top) <= dst
+                && Math.abs(a.right - b.right) <= dst && Math.abs(a.bottom - b.bottom) <= dst;
+    }
 }

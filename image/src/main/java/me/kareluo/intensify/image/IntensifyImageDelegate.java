@@ -34,11 +34,11 @@ import static me.kareluo.intensify.image.IntensifyImage.ScaleType;
 class IntensifyImageDelegate {
     private static final String TAG = "IntensifyImageDelegate";
 
-    private DisplayMetrics mDisplayMetrics;
-
     private Callback mCallback;
 
     private HandlerThread mHandlerThread;
+
+    private DisplayMetrics mDisplayMetrics;
 
     private IntensifyImageHandler mHandler;
 
@@ -50,26 +50,27 @@ class IntensifyImageDelegate {
 
     private float mDefaultMaxScale = 10f;
 
+    private boolean mAnimateScaleType = false;
+
     private ValueAnimator mZoomAnimator;
 
     private boolean mIsVertical = true;
 
     private RectF mImageArea = new RectF();
 
-    private RectF mStartRect = new RectF(), mEndRect = new RectF();
-
     private Matrix mMatrix = new Matrix();
 
-    private volatile List<ImageDrawable> mDrawables = new ArrayList<>();
+    private State mState = State.NONE;
 
     private ScaleType mScaleType = ScaleType.FIT_CENTER;
 
-    private State mState = State.NONE;
+    private RectF mStartRect = new RectF(), mEndRect = new RectF();
+
+    private volatile List<ImageDrawable> mDrawables = new ArrayList<>();
 
     private static final int[] SCALE_STEP = {1, 3};
 
     private static final int BLOCK_SIZE = 300;
-
     private static final int MSG_IMAGE_SRC = 0;
     private static final int MSG_IMAGE_LOAD = 1;
     private static final int MSG_IMAGE_INIT = 2;
@@ -128,6 +129,7 @@ class IntensifyImageDelegate {
     //@WorkerThread
     private void prepare(ImageDecoder decoder) {
         mImage = new Image(decoder);
+        mImageArea.setEmpty();
         mState = State.SRC;
     }
 
@@ -157,7 +159,7 @@ class IntensifyImageDelegate {
 
     //@WorkerThread
     private void initScaleType(Rect drawingRect) {
-        mImageArea.set(0, 0, mImage.mImageWidth, mImage.mImageHeight);
+        RectF imageArea = new RectF(0, 0, mImage.mImageWidth, mImage.mImageHeight);
         if (mScaleType == ScaleType.NONE) {
             mState = State.FREE;
             return;
@@ -173,23 +175,28 @@ class IntensifyImageDelegate {
                         : (1f * drawingRect.width() / mImage.mImageWidth);
 
                 mMatrix.setScale(mBaseScale, mBaseScale);
-                mMatrix.mapRect(mImageArea);
+                mMatrix.mapRect(imageArea);
 
-                Utils.center(mImageArea, drawingRect);
+                Utils.center(imageArea, drawingRect);
                 break;
             case FIT_AUTO:
                 mBaseScale = 1f * drawingRect.width() / mImage.mImageWidth;
 
                 mMatrix.setScale(mBaseScale, mBaseScale);
-                mMatrix.mapRect(mImageArea);
+                mMatrix.mapRect(imageArea);
 
-                Utils.centerHorizontal(mImageArea, drawingRect);
+                Utils.centerHorizontal(imageArea, drawingRect);
                 if (mIsVertical) {
-                    mImageArea.offsetTo(mImageArea.left, drawingRect.top);
+                    imageArea.offsetTo(imageArea.left, drawingRect.top);
                 } else {
-                    Utils.centerVertical(mImageArea, drawingRect);
+                    Utils.centerVertical(imageArea, drawingRect);
                 }
                 break;
+        }
+        if (!mAnimateScaleType || mImageArea.isEmpty() || mImageArea.equals(imageArea)) {
+            mImageArea.set(imageArea);
+        } else {
+            zoomTo(imageArea);
         }
         mState = State.FREE;
     }
@@ -291,6 +298,14 @@ class IntensifyImageDelegate {
             mImage.mCurrentState = null;
             requestInvalidate();
         }
+    }
+
+    public void setAnimateScaleType(boolean animate) {
+        mAnimateScaleType = animate;
+    }
+
+    public boolean isAnimateScaleType() {
+        return mAnimateScaleType;
     }
 
     /**
@@ -404,6 +419,13 @@ class IntensifyImageDelegate {
         if (!Utils.contains(mImageArea, drawingRect)) {
             Utils.home(mEndRect, drawingRect);
         }
+        mZoomAnimator.start();
+    }
+
+    public void zoomTo(RectF dst) {
+        if (mZoomAnimator.isRunning()) mZoomAnimator.cancel();
+        mStartRect.set(mImageArea);
+        mEndRect.set(dst);
         mZoomAnimator.start();
     }
 
@@ -615,6 +637,7 @@ class IntensifyImageDelegate {
                 case MSG_IMAGE_SCALE:
                     initScaleType((Rect) msg.obj);
                     requestInvalidate();
+                    requestAwakenScrollBars();
                     break;
                 case MSG_IMAGE_DRAW:
                     prepareDraw((Rect) msg.obj);

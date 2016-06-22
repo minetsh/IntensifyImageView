@@ -5,5 +5,6 @@
             <enum name="fitAuto" value="1" />
             <enum name="fitCenter" value="2" />
         </attr>
+        <attr name="animateScaleType" format="boolean" />
     </declare-styleable>
 </resources>

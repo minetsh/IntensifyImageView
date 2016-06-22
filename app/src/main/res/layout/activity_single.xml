@@ -16,6 +16,7 @@
         android:scrollbarThumbHorizontal="@drawable/thumb"
         android:scrollbarThumbVertical="@drawable/thumb"
         android:scrollbars="vertical|horizontal"
+        app:animateScaleType="true"
         app:scaleType="fitAuto" />
 
 </LinearLayout>
