@@ -36,8 +36,6 @@ class IntensifyImageDelegate {
 
     private Callback mCallback;
 
-    private HandlerThread mHandlerThread;
-
     private DisplayMetrics mDisplayMetrics;
 
     private IntensifyImageHandler mHandler;
@@ -86,9 +84,9 @@ class IntensifyImageDelegate {
     public IntensifyImageDelegate(DisplayMetrics metrics, Callback callback) {
         mDisplayMetrics = metrics;
         mCallback = Utils.requireNonNull(callback);
-        mHandlerThread = new HandlerThread(TAG);
-        mHandlerThread.start();
-        mHandler = new IntensifyImageHandler(mHandlerThread.getLooper());
+        HandlerThread handlerThread = new HandlerThread(TAG);
+        handlerThread.start();
+        mHandler = new IntensifyImageHandler(handlerThread.getLooper());
         mZoomAnimator = ValueAnimator.ofFloat(0, 1f);
         mZoomAnimator.setDuration(IntensifyImage.DURATION_ZOOM);
         mZoomAnimator.setInterpolator(new DecelerateInterpolator());
@@ -97,10 +95,6 @@ class IntensifyImageDelegate {
 
     public void onAttached() {
 
-    }
-
-    public boolean isAttached() {
-        return mHandlerThread != null;
     }
 
     public void onDetached() {
@@ -206,6 +200,7 @@ class IntensifyImageDelegate {
     private void prepareDraw(Rect rect) {
         float curScale = getScale();
         int sampleSize = getSampleSize(1f / curScale);
+        Pair<RectF, Rect> newState = Pair.create(new RectF(mImageArea), new Rect(rect));
 
         if (mImage.mImageSampleSize > sampleSize) {
             RectF drawingRect = new RectF(rect);
@@ -214,32 +209,36 @@ class IntensifyImageDelegate {
                 drawingRect.offset(-mImageArea.left, -mImageArea.top);
             }
 
-            float blockSize = BLOCK_SIZE * curScale;
+            float blockSize = BLOCK_SIZE * curScale * sampleSize;
             Rect blocks = Utils.blocks(drawingRect, blockSize);
 
             List<ImageDrawable> drawables = new ArrayList<>();
             int roundLeft = Math.round(mImageArea.left);
             int roundTop = Math.round(mImageArea.top);
-            for (int i = blocks.top; i <= blocks.bottom; i++) {
-                for (int j = blocks.left; j <= blocks.right; j++) {
-                    Bitmap bitmap = null;
-                    IntensifyImageCache.ImageCache imageCache = mImage.mImageCaches.get(sampleSize);
-                    if (imageCache != null) bitmap = imageCache.get(new Point(j, i));
-                    if (bitmap == null) continue;
-                    Rect src = bitmapRect(bitmap);
-                    Rect dst = Utils.blockRect(j, i, blockSize, roundLeft, roundTop);
-                    if (src.bottom * sampleSize != BLOCK_SIZE || src.right * sampleSize != BLOCK_SIZE) {
-                        dst.set(src.left + dst.left, src.top + dst.top,
-                                Math.round(src.right * sampleSize * curScale) + dst.left,
-                                Math.round(src.bottom * sampleSize * curScale) + dst.top);
+            IntensifyImageCache.ImageCache imageCache = mImage.mImageCaches.get(sampleSize);
+            if (imageCache != null) {
+                for (int i = blocks.top; i <= blocks.bottom; i++) {
+                    for (int j = blocks.left; j <= blocks.right; j++) {
+                        Bitmap bitmap = imageCache.createGet(new Point(j, i));
+                        if (bitmap == null) continue;
+                        Rect src = bitmapRect(bitmap);
+                        Rect dst = Utils.blockRect(j, i, blockSize, roundLeft, roundTop);
+                        if (src.bottom * sampleSize != BLOCK_SIZE
+                                || src.right * sampleSize != BLOCK_SIZE) {
+
+                            dst.set(src.left + dst.left, src.top + dst.top,
+                                    Math.round(src.right * sampleSize * curScale) + dst.left,
+                                    Math.round(src.bottom * sampleSize * curScale) + dst.top);
+                        }
+                        drawables.add(new ImageDrawable(bitmap, src, dst));
                     }
-                    drawables.add(new ImageDrawable(bitmap, src, dst));
                 }
             }
 
             mDrawables.clear();
-            mDrawables.addAll(drawables);
-
+            if (Utils.equals(newState, Pair.create(new RectF(mImageArea), new Rect(rect)))) {
+                mDrawables.addAll(drawables);
+            }
         } else mDrawables.clear();
 
         mImage.mCurrentState = Pair.create(new RectF(mImageArea), new Rect(rect));
@@ -446,13 +445,13 @@ class IntensifyImageDelegate {
             return Collections.emptyList();
         }
 
+        ArrayList<ImageDrawable> drawables = obtainBaseDrawables();
+        drawables.addAll(mDrawables);
         if (!Utils.equals(mImage.mCurrentState, Pair.create(mImageArea, drawingRect))) {
             mHandler.removeMessages(MSG_IMAGE_DRAW);
             sendMessage(MSG_IMAGE_DRAW, drawingRect);
         }
 
-        ArrayList<ImageDrawable> drawables = obtainBaseDrawables();
-        drawables.addAll(mDrawables);
         return drawables;
     }
 
@@ -492,6 +491,10 @@ class IntensifyImageDelegate {
 
     private void sendMessage(int what, Object obj) {
         mHandler.obtainMessage(what, obj).sendToTarget();
+    }
+
+    private void sendMessage(int what, int arg1, int arg2, Object obj) {
+        mHandler.obtainMessage(what, arg1, arg2, obj).sendToTarget();
     }
 
     public RectF getImageArea() {

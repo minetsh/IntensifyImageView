@@ -71,7 +71,7 @@ class IntensifyImageCache extends IntensifyCache<Integer, IntensifyImageCache.Im
         protected Bitmap create(Point key) {
             BitmapFactory.Options options = new BitmapFactory.Options();
             options.inSampleSize = level;
-            Rect rect = blockRect(key.x, key.y, BLOCK_SIZE);
+            Rect rect = blockRect(key.x, key.y, BLOCK_SIZE * level);
             if (rect.intersect(mOriginalRect)) {
                 return mRegionDecoder.decodeRegion(rect, options);
             }

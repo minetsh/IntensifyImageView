@@ -53,7 +53,7 @@ public class IntensifyImageView extends View implements IntensifyImage,
 
     private volatile boolean vFling = false;
 
-    private static final boolean DEBUG = true;
+    private static final boolean DEBUG = false;
 
     public IntensifyImageView(Context context) {
         this(context, null, 0);
@@ -118,8 +118,6 @@ public class IntensifyImageView extends View implements IntensifyImage,
         getDrawingRect(mDrawingRect);
 
         List<ImageDrawable> drawables = mDelegate.obtainImageDrawables(mDrawingRect);
-
-        Logger.d(TAG, "ImageDrawableSize=" + drawables.size());
 
         int save = canvas.save();
         int i = 0;

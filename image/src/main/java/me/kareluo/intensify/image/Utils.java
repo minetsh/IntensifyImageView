@@ -13,7 +13,7 @@ class Utils {
     }
 
     public static void center(RectF rect, Rect frame) {
-        rect.offset(frame.centerX() - rect.centerX(), frame.centerY() - rect.centerY());
+        rect.offset(frame.exactCenterX() - rect.centerX(), frame.exactCenterY() - rect.centerY());
     }
 
     public static void center(Rect rect, Rect frame) {
@@ -21,11 +21,11 @@ class Utils {
     }
 
     public static void centerVertical(RectF rect, Rect frame) {
-        rect.offset(0, frame.centerY() - rect.centerY());
+        rect.offset(0, frame.exactCenterY() - rect.centerY());
     }
 
     public static void centerHorizontal(RectF rect, Rect frame) {
-        rect.offset(frame.centerX() - rect.centerX(), 0);
+        rect.offset(frame.exactCenterX() - rect.centerX(), 0);
     }
 
     public static void home(RectF rect, Rect frame) {
