@@ -132,4 +132,24 @@ class Utils {
         }
         return o;
     }
+
+    public static float range(float v, float min, float max) {
+        return v < min ? min : (v > max ? max : v);
+    }
+
+    public static boolean strictInRange(float v, float min, float max) {
+        return v > min && v < max;
+    }
+
+    public static boolean inRange(float v, float min, float max) {
+        return v >= min && v <= max;
+    }
+
+    public static boolean strictOutRange(float v, float min, float max) {
+        return v < min || v > max;
+    }
+
+    public static boolean outRange(float v, float min, float max) {
+        return v <= min || v >= max;
+    }
 }

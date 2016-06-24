@@ -16,15 +16,17 @@ public interface IntensifyImage {
 
     void setImage(InputStream inputStream);
 
+    void setScaleType(ScaleType scaleType);
+
     int getImageWidth();
 
     int getImageHeight();
 
     float getScale();
 
-    void setScaleType(ScaleType scaleType);
-
     ScaleType getScaleType();
+
+    void setScale(float scale);
 
     void addScale(float scale, float focusX, float focusY);
 
@@ -46,11 +48,16 @@ public interface IntensifyImage {
 
     enum ScaleType {
 
+        // not use this.
         NONE(0),
 
         FIT_AUTO(1),
 
-        FIT_CENTER(2);
+        FIT_CENTER(2),
+
+        CENTER(3),
+
+        CENTER_INSIDE(4);
 
         ScaleType(int ni) {
             nativeInt = ni;
@@ -58,7 +65,7 @@ public interface IntensifyImage {
 
         static ScaleType valueOf(int value) {
             if (value < 0 || value >= values().length) {
-                return NONE;
+                return FIT_CENTER;
             }
             return values()[value];
         }
@@ -76,5 +83,9 @@ public interface IntensifyImage {
 
     interface OnLongPressListener {
         void onLongPress(boolean inside);
+    }
+
+    interface OnScaleChangeListener {
+        void onScaleChange(float scale);
     }
 }

@@ -14,7 +14,6 @@ import android.widget.OverScroller;
 
 import java.io.File;
 import java.io.InputStream;
-import java.util.ArrayList;
 import java.util.List;
 
 import me.kareluo.intensify.image.IntensifyImageDelegate.ImageDrawable;
@@ -33,12 +32,6 @@ public class IntensifyImageView extends View implements IntensifyImage,
 
     private Paint mBoardPaint;
 
-    private List<Float> mScaleSteps = new ArrayList<>();
-
-    private float mMinimumScale = 0.01f;
-
-    private float mMaximumScale = 1000f;
-
     private volatile Rect mDrawingRect = new Rect();
 
     private OverScroller mScroller;
@@ -50,6 +43,8 @@ public class IntensifyImageView extends View implements IntensifyImage,
     private OnDoubleTapListener mOnDoubleTapListener;
 
     private OnLongPressListener mOnLongPressListener;
+
+    private OnScaleChangeListener mOnScaleChangeListener;
 
     private volatile boolean vFling = false;
 
@@ -78,6 +73,14 @@ public class IntensifyImageView extends View implements IntensifyImage,
 
         mDelegate.setAnimateScaleType(
                 a.getBoolean(R.styleable.IntensifyImageView_animateScaleType, false));
+
+        mDelegate.setMinimumScale(
+                a.getFloat(R.styleable.IntensifyImageView_minimumScale, 0f));
+
+        mDelegate.setMaximumScale(
+                a.getFloat(R.styleable.IntensifyImageView_maximumScale, Float.MAX_VALUE));
+
+        mDelegate.setScale(a.getFloat(R.styleable.IntensifyImageView_scale, -1f));
 
         a.recycle();
 
@@ -118,6 +121,8 @@ public class IntensifyImageView extends View implements IntensifyImage,
         getDrawingRect(mDrawingRect);
 
         List<ImageDrawable> drawables = mDelegate.obtainImageDrawables(mDrawingRect);
+
+        Logger.d(TAG, "Size=" + drawables.size());
 
         int save = canvas.save();
         int i = 0;
@@ -178,6 +183,11 @@ public class IntensifyImageView extends View implements IntensifyImage,
     @Override
     public ScaleType getScaleType() {
         return mDelegate.getScaleType();
+    }
+
+    @Override
+    public void setScale(float scale) {
+        mDelegate.setScale(scale);
     }
 
     @Override
@@ -316,24 +326,38 @@ public class IntensifyImageView extends View implements IntensifyImage,
         mOnLongPressListener = listener;
     }
 
-    public void clearScaleStep() {
-        mScaleSteps.clear();
-    }
-
-    public void addScaleStep(float scale) {
-        mScaleSteps.add(scale);
+    public void setOnScaleChangeListener(OnScaleChangeListener listener) {
+        mOnScaleChangeListener = listener;
     }
 
     public float getBaseScale() {
         return mDelegate.getBaseScale();
     }
 
+    /**
+     * 设置过大可能会影响图片的正常显示
+     *
+     * @param scale 缩放值
+     */
     public void setMinimumScale(float scale) {
-        mMinimumScale = scale;
+        mDelegate.setMinimumScale(scale);
     }
 
+    /**
+     * 设置过小可能会影响图片的正常显示
+     *
+     * @param scale 缩放值
+     */
     public void setMaximumScale(float scale) {
-        mMaximumScale = scale;
+        mDelegate.setMaximumScale(scale);
+    }
+
+    public float getMinimumScale() {
+        return mDelegate.getMinimumScale();
+    }
+
+    public float getMaximumScale() {
+        return mDelegate.getMaximumScale();
     }
 
     @Override
@@ -344,5 +368,17 @@ public class IntensifyImageView extends View implements IntensifyImage,
     @Override
     public boolean onRequestAwakenScrollBars() {
         return awakenScrollBars();
+    }
+
+    @Override
+    public void onScaleChange(final float scale) {
+        if (mOnScaleChangeListener != null) {
+            post(new Runnable() {
+                @Override
+                public void run() {
+                    mOnScaleChangeListener.onScaleChange(scale);
+                }
+            });
+        }
     }
 }

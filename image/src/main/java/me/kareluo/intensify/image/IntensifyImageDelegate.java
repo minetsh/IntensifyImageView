@@ -44,13 +44,15 @@ class IntensifyImageDelegate {
 
     private float mBaseScale = 1f;
 
-    private float mDefaultMinScale = 0.1f;
+    private boolean mNeedReset = true;
 
-    private float mDefaultMaxScale = 10f;
+    private float mTempScale = 1f;
+
+    private float mMinimumScale = 0f;
+
+    private float mMaximumScale = Float.MAX_VALUE;
 
     private boolean mAnimateScaleType = false;
-
-    private ValueAnimator mZoomAnimator;
 
     private boolean mIsVertical = true;
 
@@ -59,6 +61,8 @@ class IntensifyImageDelegate {
     private Matrix mMatrix = new Matrix();
 
     private State mState = State.NONE;
+
+    private ValueAnimator mZoomAnimator;
 
     private ScaleType mScaleType = ScaleType.FIT_CENTER;
 
@@ -155,31 +159,34 @@ class IntensifyImageDelegate {
     //@WorkerThread
     private void initScaleType(Rect drawingRect) {
         RectF imageArea = new RectF(0, 0, mImage.mImageWidth, mImage.mImageHeight);
-        if (mScaleType == ScaleType.NONE) {
-            mState = State.FREE;
-            return;
-        }
 
         // 是否为垂直型图片
         mIsVertical = Double.compare(mImage.mImageHeight * drawingRect.width(),
                 mImage.mImageWidth * drawingRect.height()) > 0;
 
         switch (mScaleType) {
-            case FIT_CENTER:
-                mBaseScale = mIsVertical ? (1f * drawingRect.height() / mImage.mImageHeight)
-                        : (1f * drawingRect.width() / mImage.mImageWidth);
-
+            case NONE:
+                mBaseScale = Utils.range(mNeedReset ? 1f : mTempScale, mMinimumScale, mMaximumScale);
                 mMatrix.setScale(mBaseScale, mBaseScale);
                 mMatrix.mapRect(imageArea);
+                imageArea.offsetTo(drawingRect.left, drawingRect.top);
+                break;
 
+            case FIT_CENTER:
+                mBaseScale = mNeedReset ? (mIsVertical ? (1f * drawingRect.height() / mImage.mImageHeight)
+                        : (1f * drawingRect.width() / mImage.mImageWidth)) : mTempScale;
+
+                mBaseScale = Utils.range(mBaseScale, mMinimumScale, mMaximumScale);
+                mMatrix.setScale(mBaseScale, mBaseScale);
+                mMatrix.mapRect(imageArea);
                 Utils.center(imageArea, drawingRect);
                 break;
-            case FIT_AUTO:
-                mBaseScale = 1f * drawingRect.width() / mImage.mImageWidth;
 
+            case FIT_AUTO:
+                mBaseScale = mNeedReset ? 1f * drawingRect.width() / mImage.mImageWidth : mTempScale;
+                mBaseScale = Utils.range(mBaseScale, mMinimumScale, mMaximumScale);
                 mMatrix.setScale(mBaseScale, mBaseScale);
                 mMatrix.mapRect(imageArea);
-
                 Utils.centerHorizontal(imageArea, drawingRect);
                 if (mIsVertical) {
                     imageArea.offsetTo(imageArea.left, drawingRect.top);
@@ -187,12 +194,32 @@ class IntensifyImageDelegate {
                     Utils.centerVertical(imageArea, drawingRect);
                 }
                 break;
+
+            case CENTER:
+                mBaseScale = mNeedReset ? (mIsVertical ? (1f * drawingRect.width() / mImage.mImageWidth)
+                        : (1f * drawingRect.height() / mImage.mImageHeight)) : mTempScale;
+
+                mBaseScale = Utils.range(mBaseScale, mMinimumScale, mMaximumScale);
+                mMatrix.setScale(mBaseScale, mBaseScale);
+                mMatrix.mapRect(imageArea);
+                Utils.center(imageArea, drawingRect);
+                break;
+
+            case CENTER_INSIDE:
+                mBaseScale = mNeedReset ? Math.min(mIsVertical ? (1f * drawingRect.height() / mImage.mImageHeight)
+                        : (1f * drawingRect.width() / mImage.mImageWidth), 1f) : mTempScale;
+                mBaseScale = Utils.range(mBaseScale, mMinimumScale, mMaximumScale);
+                mMatrix.setScale(mBaseScale, mBaseScale);
+                mMatrix.mapRect(imageArea);
+                Utils.center(imageArea, drawingRect);
+                break;
         }
         if (!mAnimateScaleType || mImageArea.isEmpty() || mImageArea.equals(imageArea)) {
             mImageArea.set(imageArea);
         } else {
             zoomTo(imageArea);
         }
+        mNeedReset = true;
         mState = State.FREE;
     }
 
@@ -253,6 +280,22 @@ class IntensifyImageDelegate {
         mState = State.NONE;
     }
 
+    /**
+     * 受限制于minimumScale和maximumScale
+     *
+     * @param scale 缩放值
+     */
+    public void setScale(float scale) {
+        if (scale < 0.0f) return;
+        mTempScale = scale;
+        mNeedReset = false;
+        if (mState.ordinal() > State.INIT.ordinal()) {
+            mState = State.INIT;
+            requestInvalidate();
+            requestAwakenScrollBars();
+        }
+    }
+
     public float getScale() {
         return 1f * mImageArea.width() / mImage.mImageWidth;
     }
@@ -283,6 +326,46 @@ class IntensifyImageDelegate {
     }
 
     /**
+     * 设置最小缩放值
+     *
+     * @param minimumScale 最小缩放值
+     */
+    public void setMinimumScale(float minimumScale) {
+        if (minimumScale <= mMaximumScale) {
+            mMinimumScale = minimumScale;
+            if (mState.ordinal() > State.INIT.ordinal()) {
+                mState = State.INIT;
+                requestInvalidate();
+                requestAwakenScrollBars();
+            }
+        }
+    }
+
+    /**
+     * 设置最大缩放值
+     *
+     * @param maximumScale 最大缩放值
+     */
+    public void setMaximumScale(float maximumScale) {
+        if (maximumScale >= mMinimumScale) {
+            mMaximumScale = maximumScale;
+            if (mState.ordinal() > State.INIT.ordinal()) {
+                mState = State.INIT;
+                requestInvalidate();
+                requestAwakenScrollBars();
+            }
+        }
+    }
+
+    public float getMinimumScale() {
+        return mMinimumScale;
+    }
+
+    public float getMaximumScale() {
+        return mMaximumScale;
+    }
+
+    /**
      * 请求图片归位
      */
     public void zoomHoming(Rect drawingRect) {
@@ -303,6 +386,11 @@ class IntensifyImageDelegate {
         }
     }
 
+    /**
+     * 设置ScaleType动画过渡
+     *
+     * @param animate true 动画过渡，false 无过渡动画
+     */
     public void setAnimateScaleType(boolean animate) {
         mAnimateScaleType = animate;
     }
@@ -406,8 +494,15 @@ class IntensifyImageDelegate {
     }
 
     public void scale(float scale, float focusX, float focusY) {
+        if (scale == 1.0f) return;
+        float curScale = getScale();
+        float preScale = curScale * scale;
+        if (!Utils.inRange(preScale, mMinimumScale, mMaximumScale)) {
+            scale = Utils.range(preScale, mMinimumScale, mMaximumScale) / curScale;
+        }
         mMatrix.setScale(scale, scale, focusX, focusY);
         mMatrix.mapRect(mImageArea);
+        requestScaleChange();
     }
 
     public void zoomScale(Rect drawingRect, float scale, float focusX, float focusY) {
@@ -438,6 +533,10 @@ class IntensifyImageDelegate {
 
     private void requestAwakenScrollBars() {
         mCallback.onRequestAwakenScrollBars();
+    }
+
+    private void requestScaleChange() {
+        mCallback.onScaleChange(getScale());
     }
 
     public List<ImageDrawable> obtainImageDrawables(Rect drawingRect) {
@@ -480,7 +579,7 @@ class IntensifyImageDelegate {
                 return true;
             case INIT:
                 sendMessage(MSG_IMAGE_SCALE, drawingRect);
-                return true;
+                return mImageArea.isEmpty();
         }
         return false;
     }
@@ -520,6 +619,7 @@ class IntensifyImageDelegate {
         public void onAnimationUpdate(ValueAnimator animation) {
             Float value = (Float) animation.getAnimatedValue();
             Utils.evaluate(value, mStartRect, mEndRect, mImageArea);
+            requestScaleChange();
             requestInvalidate();
             requestAwakenScrollBars();
         }
@@ -620,6 +720,8 @@ class IntensifyImageDelegate {
         void onRequestInvalidate();
 
         boolean onRequestAwakenScrollBars();
+
+        void onScaleChange(float scale);
     }
 
     private class IntensifyImageHandler extends Handler {
@@ -631,30 +733,36 @@ class IntensifyImageDelegate {
         @Override
         public void handleMessage(Message msg) {
             switch (msg.what) {
-                case MSG_IMAGE_SRC:
-                    prepare((ImageDecoder) msg.obj);
+                case MSG_IMAGE_DRAW:
+                    prepareDraw((Rect) msg.obj);
                     requestInvalidate();
                     break;
-                case MSG_IMAGE_LOAD:
-                    load();
-                    requestInvalidate();
-                    break;
-                case MSG_IMAGE_INIT:
-                    initialize((Rect) msg.obj);
-                    requestInvalidate();
-                    break;
+
                 case MSG_IMAGE_SCALE:
                     initScaleType((Rect) msg.obj);
                     requestInvalidate();
                     requestAwakenScrollBars();
                     break;
-                case MSG_IMAGE_DRAW:
-                    prepareDraw((Rect) msg.obj);
+
+                case MSG_IMAGE_SRC:
+                    prepare((ImageDecoder) msg.obj);
                     requestInvalidate();
                     break;
+
+                case MSG_IMAGE_LOAD:
+                    load();
+                    requestInvalidate();
+                    break;
+
+                case MSG_IMAGE_INIT:
+                    initialize((Rect) msg.obj);
+                    requestInvalidate();
+                    break;
+
                 case MSG_IMAGE_RELEASE:
                     release();
                     break;
+
                 case MSG_QUIT:
                     release();
                     try {

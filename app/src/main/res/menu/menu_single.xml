@@ -15,6 +15,12 @@
         app:showAsAction="ifRoom" />
 
     <item
+        android:id="@+id/menu_scale"
+        android:icon="@mipmap/ic_unfold_more_white"
+        android:title="@string/scale_value"
+        app:showAsAction="ifRoom" />
+
+    <item
         android:id="@+id/menu_scale_type"
         android:title="@string/scale_type"
         app:showAsAction="never" />
