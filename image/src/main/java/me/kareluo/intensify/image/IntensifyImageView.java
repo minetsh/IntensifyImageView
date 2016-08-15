@@ -8,6 +8,7 @@ import android.graphics.Paint;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.os.SystemClock;
 import android.util.AttributeSet;
 import android.view.View;
 import android.widget.OverScroller;
@@ -122,7 +123,7 @@ public class IntensifyImageView extends View implements IntensifyImage,
 
         List<ImageDrawable> drawables = mDelegate.obtainImageDrawables(mDrawingRect);
 
-        Logger.d(TAG, "Size=" + drawables.size());
+//        Logger.d(TAG, "Size=" + drawables.size());
 
         int save = canvas.save();
         int i = 0;
@@ -147,16 +148,19 @@ public class IntensifyImageView extends View implements IntensifyImage,
 
     @Override
     public void setImage(String path) {
+        mScroller.abortAnimation();
         mDelegate.load(path);
     }
 
     @Override
     public void setImage(File file) {
+        mScroller.abortAnimation();
         mDelegate.load(file);
     }
 
     @Override
     public void setImage(InputStream inputStream) {
+        mScroller.abortAnimation();
         mDelegate.load(inputStream);
     }
 
@@ -297,10 +301,11 @@ public class IntensifyImageView extends View implements IntensifyImage,
 
     @Override
     public void doubleTap(float x, float y) {
-        nextScale(x, y);
         if (mOnDoubleTapListener != null) {
-            mOnDoubleTapListener.onDoubleTap(isInside(x, y));
-        }
+            if (!mOnDoubleTapListener.onDoubleTap(isInside(x, y))) {
+                nextScale(x, y);
+            }
+        } else nextScale(x, y);
     }
 
     @Override

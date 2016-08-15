@@ -14,7 +14,6 @@ import android.widget.ViewSwitcher;
 
 import java.io.IOException;
 import java.util.Locale;
-import java.util.Map;
 
 import me.kareluo.intensify.image.IntensifyImage;
 import me.kareluo.intensify.image.IntensifyImageView;
@@ -22,7 +21,8 @@ import me.kareluo.intensify.image.IntensifyImageView;
 /**
  * Created by felix on 15/12/25.
  */
-public class SinglePreviewActivity extends AppCompatActivity implements IntensifyImage.OnScaleChangeListener, SeekBar.OnSeekBarChangeListener {
+public class SinglePreviewActivity extends AppCompatActivity implements
+        IntensifyImage.OnScaleChangeListener, SeekBar.OnSeekBarChangeListener {
     private static final String TAG = "SinglePreviewActivity";
 
     private IntensifyImageView mIntensifyImageView;

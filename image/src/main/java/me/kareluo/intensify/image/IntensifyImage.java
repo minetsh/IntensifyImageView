@@ -78,7 +78,7 @@ public interface IntensifyImage {
     }
 
     interface OnDoubleTapListener {
-        void onDoubleTap(boolean inside);
+        boolean onDoubleTap(boolean inside);
     }
 
     interface OnLongPressListener {

@@ -60,7 +60,7 @@ class IntensifyImageDelegate {
 
     private Matrix mMatrix = new Matrix();
 
-    private State mState = State.NONE;
+    private volatile State mState = State.NONE;
 
     private ValueAnimator mZoomAnimator;
 
@@ -166,26 +166,28 @@ class IntensifyImageDelegate {
 
         switch (mScaleType) {
             case NONE:
-                mBaseScale = Utils.range(mNeedReset ? 1f : mTempScale, mMinimumScale, mMaximumScale);
-                mMatrix.setScale(mBaseScale, mBaseScale);
+                mBaseScale = Utils.range(1f, mMinimumScale, mMaximumScale);
+                if (mNeedReset) mTempScale = mBaseScale;
+                mMatrix.setScale(mTempScale, mTempScale);
                 mMatrix.mapRect(imageArea);
                 imageArea.offsetTo(drawingRect.left, drawingRect.top);
                 break;
 
             case FIT_CENTER:
-                mBaseScale = mNeedReset ? (mIsVertical ? (1f * drawingRect.height() / mImage.mImageHeight)
-                        : (1f * drawingRect.width() / mImage.mImageWidth)) : mTempScale;
-
+                mBaseScale = mIsVertical ? (1f * drawingRect.height() / mImage.mImageHeight)
+                        : (1f * drawingRect.width() / mImage.mImageWidth);
                 mBaseScale = Utils.range(mBaseScale, mMinimumScale, mMaximumScale);
-                mMatrix.setScale(mBaseScale, mBaseScale);
+                if (mNeedReset) mTempScale = mBaseScale;
+                mMatrix.setScale(mTempScale, mTempScale);
                 mMatrix.mapRect(imageArea);
                 Utils.center(imageArea, drawingRect);
                 break;
 
             case FIT_AUTO:
-                mBaseScale = mNeedReset ? 1f * drawingRect.width() / mImage.mImageWidth : mTempScale;
+                mBaseScale = 1f * drawingRect.width() / mImage.mImageWidth;
                 mBaseScale = Utils.range(mBaseScale, mMinimumScale, mMaximumScale);
-                mMatrix.setScale(mBaseScale, mBaseScale);
+                if (mNeedReset) mTempScale = mBaseScale;
+                mMatrix.setScale(mTempScale, mTempScale);
                 mMatrix.mapRect(imageArea);
                 Utils.centerHorizontal(imageArea, drawingRect);
                 if (mIsVertical) {
@@ -196,24 +198,27 @@ class IntensifyImageDelegate {
                 break;
 
             case CENTER:
-                mBaseScale = mNeedReset ? (mIsVertical ? (1f * drawingRect.width() / mImage.mImageWidth)
-                        : (1f * drawingRect.height() / mImage.mImageHeight)) : mTempScale;
+                mBaseScale = mIsVertical ? (1f * drawingRect.width() / mImage.mImageWidth)
+                        : (1f * drawingRect.height() / mImage.mImageHeight);
 
                 mBaseScale = Utils.range(mBaseScale, mMinimumScale, mMaximumScale);
-                mMatrix.setScale(mBaseScale, mBaseScale);
+                if (mNeedReset) mTempScale = mBaseScale;
+                mMatrix.setScale(mTempScale, mTempScale);
                 mMatrix.mapRect(imageArea);
                 Utils.center(imageArea, drawingRect);
                 break;
 
             case CENTER_INSIDE:
-                mBaseScale = mNeedReset ? Math.min(mIsVertical ? (1f * drawingRect.height() / mImage.mImageHeight)
-                        : (1f * drawingRect.width() / mImage.mImageWidth), 1f) : mTempScale;
+                mBaseScale = Math.min(mIsVertical ? (1f * drawingRect.height() / mImage.mImageHeight)
+                        : (1f * drawingRect.width() / mImage.mImageWidth), 1f);
                 mBaseScale = Utils.range(mBaseScale, mMinimumScale, mMaximumScale);
-                mMatrix.setScale(mBaseScale, mBaseScale);
+                if (mNeedReset) mTempScale = mBaseScale;
+                mMatrix.setScale(mTempScale, mTempScale);
                 mMatrix.mapRect(imageArea);
                 Utils.center(imageArea, drawingRect);
                 break;
         }
+        Logger.d(TAG, "DrawingRect=" + drawingRect + "/ImageArea=" + imageArea);
         if (!mAnimateScaleType || mImageArea.isEmpty() || mImageArea.equals(imageArea)) {
             mImageArea.set(imageArea);
         } else {
@@ -273,6 +278,7 @@ class IntensifyImageDelegate {
 
     //@WorkerThread
     private void release() {
+        mZoomAnimator.cancel();
         if (mImage != null) {
             mImage.release();
             mImage = null;
@@ -305,15 +311,10 @@ class IntensifyImageDelegate {
     }
 
     public float getNextStepScale(Rect drawingRect) {
-        if (Utils.isEmpty(drawingRect)) return mBaseScale;
+        if (Utils.isEmpty(drawingRect)) return mBaseScale / getScale();
 
-        float v;
-
-        if (mIsVertical) {
-            v = mImageArea.width() / drawingRect.width();
-        } else {
-            v = mImageArea.height() / drawingRect.height();
-        }
+        float v = mIsVertical ? mImageArea.width() / drawingRect.width() :
+                mImageArea.height() / drawingRect.height();
 
         // + 0.1 避免.99999型误差
         int index = Math.abs(Arrays.binarySearch(
@@ -370,7 +371,7 @@ class IntensifyImageDelegate {
      */
     public void zoomHoming(Rect drawingRect) {
         if (Utils.contains(mImageArea, drawingRect)) return;
-        if (mZoomAnimator.isRunning()) mZoomAnimator.cancel();
+        mZoomAnimator.cancel();
         mStartRect.set(mImageArea);
         mEndRect.set(mImageArea);
         Utils.home(mEndRect, drawingRect);
@@ -507,7 +508,7 @@ class IntensifyImageDelegate {
 
     public void zoomScale(Rect drawingRect, float scale, float focusX, float focusY) {
         if (mState.ordinal() < State.FREE.ordinal() || Utils.isEmpty(drawingRect)) return;
-        if (mZoomAnimator.isRunning()) mZoomAnimator.cancel();
+        mZoomAnimator.cancel();
         mStartRect.set(mImageArea);
 
         mMatrix.setScale(scale, scale, focusX, focusY);
@@ -517,11 +518,12 @@ class IntensifyImageDelegate {
         if (!Utils.contains(mImageArea, drawingRect)) {
             Utils.home(mEndRect, drawingRect);
         }
+        Logger.d(TAG, "Start=" + mStartRect + "/End=" + mEndRect);
         mZoomAnimator.start();
     }
 
     public void zoomTo(RectF dst) {
-        if (mZoomAnimator.isRunning()) mZoomAnimator.cancel();
+        mZoomAnimator.cancel();
         mStartRect.set(mImageArea);
         mEndRect.set(dst);
         mZoomAnimator.start();
@@ -568,6 +570,7 @@ class IntensifyImageDelegate {
      * @return true 需要准备
      */
     public boolean isNeedPrepare(Rect drawingRect) {
+        mHandler.removeCallbacksAndMessages(null);
         switch (mState) {
             case NONE:
                 return true;
@@ -622,6 +625,7 @@ class IntensifyImageDelegate {
             requestScaleChange();
             requestInvalidate();
             requestAwakenScrollBars();
+            Logger.d(TAG, "Anim Update.");
         }
     }
 

@@ -20,8 +20,6 @@
         android:scrollbarThumbVertical="@drawable/thumb"
         android:scrollbars="vertical|horizontal"
         app:animateScaleType="true"
-        app:maximumScale="100"
-        app:minimumScale="0.1"
         app:scaleType="fitAuto" />
 
     <ViewSwitcher
