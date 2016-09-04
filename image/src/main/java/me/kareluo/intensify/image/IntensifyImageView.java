@@ -8,7 +8,6 @@ import android.graphics.Paint;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.RectF;
-import android.os.SystemClock;
 import android.util.AttributeSet;
 import android.view.View;
 import android.widget.OverScroller;
@@ -122,8 +121,6 @@ public class IntensifyImageView extends View implements IntensifyImage,
         getDrawingRect(mDrawingRect);
 
         List<ImageDrawable> drawables = mDelegate.obtainImageDrawables(mDrawingRect);
-
-//        Logger.d(TAG, "Size=" + drawables.size());
 
         int save = canvas.save();
         int i = 0;
