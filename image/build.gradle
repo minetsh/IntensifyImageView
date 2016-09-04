@@ -41,7 +41,7 @@ install {
             project {
                 packaging 'aar'
 
-                name 'Picture Preview Lib，用于显示原图级别的图片预览库'
+                name 'me.kareluo.intensify:image'
                 url siteUrl
 
                 licenses {
