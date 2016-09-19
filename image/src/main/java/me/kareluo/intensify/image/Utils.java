@@ -13,7 +13,7 @@ class Utils {
     }
 
     public static void center(RectF rect, Rect frame) {
-        rect.offset(frame.centerX() - rect.centerX(), frame.centerY() - rect.centerY());
+        rect.offset(frame.exactCenterX() - rect.centerX(), frame.exactCenterY() - rect.centerY());
     }
 
     public static void center(Rect rect, Rect frame) {
@@ -21,11 +21,11 @@ class Utils {
     }
 
     public static void centerVertical(RectF rect, Rect frame) {
-        rect.offset(0, frame.centerY() - rect.centerY());
+        rect.offset(0, frame.exactCenterY() - rect.centerY());
     }
 
     public static void centerHorizontal(RectF rect, Rect frame) {
-        rect.offset(frame.centerX() - rect.centerX(), 0);
+        rect.offset(frame.exactCenterX() - rect.centerX(), 0);
     }
 
     public static void home(RectF rect, Rect frame) {
@@ -121,5 +121,35 @@ class Utils {
 
     public static int ceil(float value) {
         return (int) Math.ceil(value);
+    }
+
+    /**
+     * Returns {@code o} if non-null, or throws {@code NullPointerException}.
+     */
+    public static <T> T requireNonNull(T o) {
+        if (o == null) {
+            throw new NullPointerException();
+        }
+        return o;
+    }
+
+    public static float range(float v, float min, float max) {
+        return v < min ? min : (v > max ? max : v);
+    }
+
+    public static boolean strictInRange(float v, float min, float max) {
+        return v > min && v < max;
+    }
+
+    public static boolean inRange(float v, float min, float max) {
+        return v >= min && v <= max;
+    }
+
+    public static boolean strictOutRange(float v, float min, float max) {
+        return v < min || v > max;
+    }
+
+    public static boolean outRange(float v, float min, float max) {
+        return v <= min || v >= max;
     }
 }

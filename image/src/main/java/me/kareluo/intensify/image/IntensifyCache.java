@@ -66,7 +66,6 @@ public class IntensifyCache<K, V, L> {
      * be created.
      *
      * @param key the key of the value.
-     *
      * @return the value of the key.
      */
     public final V get(K key) {
@@ -120,6 +119,84 @@ public class IntensifyCache<K, V, L> {
             trimToSize(maxSize);
             return createdValue;
         }
+    }
+
+    /**
+     * original get method.
+     *
+     * @param key the cache key.
+     * @return value of the key.
+     */
+    protected V createGet(K key) {
+        if (key == null) {
+            throw new NullPointerException("key == null");
+        }
+
+        V mapValue;
+        synchronized (this) {
+            mapValue = map.get(key);
+            if (mapValue != null) {
+                hitCount++;
+                return mapValue;
+            }
+            missCount++;
+        }
+
+        /*
+         * Attempt to create a value. This may take a long time, and the map
+         * may be different when create() returns. If a conflicting value was
+         * added to the map while create() was working, we leave that value in
+         * the map and release the created value.
+         */
+
+        V createdValue = create(key);
+        if (createdValue == null) {
+            return null;
+        }
+
+        synchronized (this) {
+            createCount++;
+            mapValue = map.put(key, createdValue);
+
+            if (mapValue != null) {
+                // There was a conflict so undo that last put
+                map.put(key, mapValue);
+            } else {
+                size += safeSizeOf(key, createdValue);
+            }
+        }
+
+        if (mapValue != null) {
+            entryRemoved(false, key, createdValue, mapValue);
+            return mapValue;
+        } else {
+            trimToSize(maxSize);
+            return createdValue;
+        }
+    }
+
+    /**
+     * return the value of the key or alternative value.
+     *
+     * @param key the cache key.
+     * @return value of the key.
+     */
+    protected V alternativeGet(K key) {
+        if (key == null) {
+            throw new NullPointerException("key == null");
+        }
+
+        V mapValue;
+        synchronized (this) {
+            mapValue = map.get(key);
+            if (mapValue != null) {
+                hitCount++;
+                return mapValue;
+            }
+            missCount++;
+        }
+
+        return alternative(key, level);
     }
 
     /**
@@ -257,7 +334,7 @@ public class IntensifyCache<K, V, L> {
      *
      * @param evicted  true if the entry is being removed to make space, false
      *                 if the removal was caused by a {@link #put} or {@link #remove}.
-     * @param key the key of the value to remove.
+     * @param key      the key of the value to remove.
      * @param oldValue the oldValue to be replaced.
      * @param newValue the new value for {@code key}, if it exists. If non-null,
      *                 this removal was caused by a {@link #put}. Otherwise it was caused by
@@ -300,9 +377,8 @@ public class IntensifyCache<K, V, L> {
      * is the number of entries and max size is the maximum number of entries.
      * An entry's size must not change while it is in the cache.
      *
-     * @param key the key of the value.
+     * @param key   the key of the value.
      * @param value the value of the key.
-     *
      * @return the size of the key, default size is 1.
      */
     protected int sizeOf(K key, V value) {

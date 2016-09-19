@@ -8,16 +8,12 @@ import android.graphics.Paint;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.RectF;
-import android.graphics.drawable.BitmapDrawable;
-import android.graphics.drawable.Drawable;
-import android.renderscript.Float2;
 import android.util.AttributeSet;
 import android.view.View;
 import android.widget.OverScroller;
 
 import java.io.File;
 import java.io.InputStream;
-import java.util.ArrayList;
 import java.util.List;
 
 import me.kareluo.intensify.image.IntensifyImageDelegate.ImageDrawable;
@@ -36,12 +32,6 @@ public class IntensifyImageView extends View implements IntensifyImage,
 
     private Paint mBoardPaint;
 
-    private List<Float> mScaleSteps = new ArrayList<>();
-
-    private float mMinimumScale = 0.01f;
-
-    private float mMaximumScale = 1000f;
-
     private volatile Rect mDrawingRect = new Rect();
 
     private OverScroller mScroller;
@@ -54,7 +44,9 @@ public class IntensifyImageView extends View implements IntensifyImage,
 
     private OnLongPressListener mOnLongPressListener;
 
-    private volatile boolean fling = false;
+    private OnScaleChangeListener mOnScaleChangeListener;
+
+    private volatile boolean vFling = false;
 
     private static final boolean DEBUG = false;
 
@@ -78,6 +70,17 @@ public class IntensifyImageView extends View implements IntensifyImage,
 
         mDelegate.setScaleType(ScaleType.valueOf(
                 a.getInt(R.styleable.IntensifyImageView_scaleType, ScaleType.FIT_CENTER.nativeInt)));
+
+        mDelegate.setAnimateScaleType(
+                a.getBoolean(R.styleable.IntensifyImageView_animateScaleType, false));
+
+        mDelegate.setMinimumScale(
+                a.getFloat(R.styleable.IntensifyImageView_minimumScale, 0f));
+
+        mDelegate.setMaximumScale(
+                a.getFloat(R.styleable.IntensifyImageView_maximumScale, Float.MAX_VALUE));
+
+        mDelegate.setScale(a.getFloat(R.styleable.IntensifyImageView_scale, -1f));
 
         a.recycle();
 
@@ -117,7 +120,7 @@ public class IntensifyImageView extends View implements IntensifyImage,
     protected void onDraw(Canvas canvas) {
         getDrawingRect(mDrawingRect);
 
-        List<ImageDrawable> drawables = mDelegate.getImageDrawables(mDrawingRect);
+        List<ImageDrawable> drawables = mDelegate.obtainImageDrawables(mDrawingRect);
 
         int save = canvas.save();
         int i = 0;
@@ -142,16 +145,19 @@ public class IntensifyImageView extends View implements IntensifyImage,
 
     @Override
     public void setImage(String path) {
+        mScroller.abortAnimation();
         mDelegate.load(path);
     }
 
     @Override
     public void setImage(File file) {
+        mScroller.abortAnimation();
         mDelegate.load(file);
     }
 
     @Override
     public void setImage(InputStream inputStream) {
+        mScroller.abortAnimation();
         mDelegate.load(inputStream);
     }
 
@@ -181,6 +187,11 @@ public class IntensifyImageView extends View implements IntensifyImage,
     }
 
     @Override
+    public void setScale(float scale) {
+        mDelegate.setScale(scale);
+    }
+
+    @Override
     public void addScale(float scale, float focusX, float focusY) {
         mDelegate.scale(scale, focusX + getScrollX(), focusY + getScrollY());
         postInvalidate();
@@ -200,12 +211,32 @@ public class IntensifyImageView extends View implements IntensifyImage,
             scrollTo(mScroller.getCurrX(), mScroller.getCurrY());
             postInvalidate();
         } else {
-            if (fling) {
+            if (vFling) {
                 getDrawingRect(mDrawingRect);
                 mDelegate.zoomHoming(mDrawingRect);
-                fling = false;
+                vFling = false;
             }
         }
+    }
+
+    @Override
+    protected int computeHorizontalScrollOffset() {
+        return mDelegate.getHorizontalOffset(getScrollX());
+    }
+
+    @Override
+    protected int computeHorizontalScrollRange() {
+        return mDelegate.getImageWidth();
+    }
+
+    @Override
+    protected int computeVerticalScrollOffset() {
+        return mDelegate.getVerticalOffset(getScrollY());
+    }
+
+    @Override
+    protected int computeVerticalScrollRange() {
+        return mDelegate.getImageHeight();
     }
 
     @Override
@@ -231,7 +262,7 @@ public class IntensifyImageView extends View implements IntensifyImage,
                     Math.round(Math.min(imageArea.top, mDrawingRect.top)),
                     Math.round(Math.max(imageArea.bottom - mDrawingRect.height(), mDrawingRect.top)),
                     100, 100);
-            fling = true;
+            vFling = true;
             postInvalidate();
         }
     }
@@ -267,10 +298,11 @@ public class IntensifyImageView extends View implements IntensifyImage,
 
     @Override
     public void doubleTap(float x, float y) {
-        nextScale(x, y);
         if (mOnDoubleTapListener != null) {
-            mOnDoubleTapListener.onDoubleTap(isInside(x, y));
-        }
+            if (!mOnDoubleTapListener.onDoubleTap(isInside(x, y))) {
+                nextScale(x, y);
+            }
+        } else nextScale(x, y);
     }
 
     @Override
@@ -296,28 +328,59 @@ public class IntensifyImageView extends View implements IntensifyImage,
         mOnLongPressListener = listener;
     }
 
-    public void clearScaleStep() {
-        mScaleSteps.clear();
-    }
-
-    public void addScaleStep(float scale) {
-        mScaleSteps.add(scale);
+    public void setOnScaleChangeListener(OnScaleChangeListener listener) {
+        mOnScaleChangeListener = listener;
     }
 
     public float getBaseScale() {
         return mDelegate.getBaseScale();
     }
 
+    /**
+     * 设置过大可能会影响图片的正常显示
+     *
+     * @param scale 缩放值
+     */
     public void setMinimumScale(float scale) {
-        mMinimumScale = scale;
+        mDelegate.setMinimumScale(scale);
     }
 
+    /**
+     * 设置过小可能会影响图片的正常显示
+     *
+     * @param scale 缩放值
+     */
     public void setMaximumScale(float scale) {
-        mMaximumScale = scale;
+        mDelegate.setMaximumScale(scale);
+    }
+
+    public float getMinimumScale() {
+        return mDelegate.getMinimumScale();
+    }
+
+    public float getMaximumScale() {
+        return mDelegate.getMaximumScale();
     }
 
     @Override
     public void onRequestInvalidate() {
         postInvalidate();
+    }
+
+    @Override
+    public boolean onRequestAwakenScrollBars() {
+        return awakenScrollBars();
+    }
+
+    @Override
+    public void onScaleChange(final float scale) {
+        if (mOnScaleChangeListener != null) {
+            post(new Runnable() {
+                @Override
+                public void run() {
+                    mOnScaleChangeListener.onScaleChange(scale);
+                }
+            });
+        }
     }
 }

@@ -15,7 +15,6 @@ import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.Message;
 import android.util.DisplayMetrics;
-import android.util.Log;
 import android.util.Pair;
 import android.view.animation.DecelerateInterpolator;
 
@@ -35,11 +34,9 @@ import static me.kareluo.intensify.image.IntensifyImage.ScaleType;
 class IntensifyImageDelegate {
     private static final String TAG = "IntensifyImageDelegate";
 
-    private DisplayMetrics mDisplayMetrics;
-
     private Callback mCallback;
 
-    private HandlerThread mHandlerThread;
+    private DisplayMetrics mDisplayMetrics;
 
     private IntensifyImageHandler mHandler;
 
@@ -47,30 +44,35 @@ class IntensifyImageDelegate {
 
     private float mBaseScale = 1f;
 
-    private float mDefaultMinScale = 0.1f;
+    private boolean mNeedReset = true;
 
-    private float mDefaultMaxScale = 10f;
+    private float mTempScale = 1f;
 
-    private ValueAnimator mZoomAnimator;
+    private float mMinimumScale = 0f;
+
+    private float mMaximumScale = Float.MAX_VALUE;
+
+    private boolean mAnimateScaleType = false;
 
     private boolean mIsVertical = true;
 
     private RectF mImageArea = new RectF();
 
-    private RectF mStartRect = new RectF(), mEndRect = new RectF();
-
     private Matrix mMatrix = new Matrix();
 
-    private volatile List<ImageDrawable> mDrawables = new ArrayList<>();
+    private volatile State mState = State.NONE;
+
+    private ValueAnimator mZoomAnimator;
 
     private ScaleType mScaleType = ScaleType.FIT_CENTER;
 
-    private State mState = State.NONE;
+    private RectF mStartRect = new RectF(), mEndRect = new RectF();
+
+    private volatile List<ImageDrawable> mDrawables = new ArrayList<>();
 
     private static final int[] SCALE_STEP = {1, 3};
 
     private static final int BLOCK_SIZE = 300;
-
     private static final int MSG_IMAGE_SRC = 0;
     private static final int MSG_IMAGE_LOAD = 1;
     private static final int MSG_IMAGE_INIT = 2;
@@ -85,10 +87,10 @@ class IntensifyImageDelegate {
 
     public IntensifyImageDelegate(DisplayMetrics metrics, Callback callback) {
         mDisplayMetrics = metrics;
-        mCallback = callback;
-        mHandlerThread = new HandlerThread(TAG);
-        mHandlerThread.start();
-        mHandler = new IntensifyImageHandler(mHandlerThread.getLooper());
+        mCallback = Utils.requireNonNull(callback);
+        HandlerThread handlerThread = new HandlerThread(TAG);
+        handlerThread.start();
+        mHandler = new IntensifyImageHandler(handlerThread.getLooper());
         mZoomAnimator = ValueAnimator.ofFloat(0, 1f);
         mZoomAnimator.setDuration(IntensifyImage.DURATION_ZOOM);
         mZoomAnimator.setInterpolator(new DecelerateInterpolator());
@@ -97,10 +99,6 @@ class IntensifyImageDelegate {
 
     public void onAttached() {
 
-    }
-
-    public boolean isAttached() {
-        return mHandlerThread != null;
     }
 
     public void onDetached() {
@@ -129,7 +127,9 @@ class IntensifyImageDelegate {
     //@WorkerThread
     private void prepare(ImageDecoder decoder) {
         mImage = new Image(decoder);
+        mImageArea.setEmpty();
         mState = State.SRC;
+        load();
     }
 
     //@WorkerThread
@@ -158,40 +158,73 @@ class IntensifyImageDelegate {
 
     //@WorkerThread
     private void initScaleType(Rect drawingRect) {
-        mImageArea.set(0, 0, mImage.mImageWidth, mImage.mImageHeight);
-        if (mScaleType == ScaleType.NONE) {
-            mState = State.FREE;
-            return;
-        }
+        RectF imageArea = new RectF(0, 0, mImage.mImageWidth, mImage.mImageHeight);
 
         // 是否为垂直型图片
         mIsVertical = Double.compare(mImage.mImageHeight * drawingRect.width(),
                 mImage.mImageWidth * drawingRect.height()) > 0;
 
         switch (mScaleType) {
+            case NONE:
+                mBaseScale = Utils.range(1f, mMinimumScale, mMaximumScale);
+                if (mNeedReset) mTempScale = mBaseScale;
+                mMatrix.setScale(mTempScale, mTempScale);
+                mMatrix.mapRect(imageArea);
+                imageArea.offsetTo(drawingRect.left, drawingRect.top);
+                break;
+
             case FIT_CENTER:
                 mBaseScale = mIsVertical ? (1f * drawingRect.height() / mImage.mImageHeight)
                         : (1f * drawingRect.width() / mImage.mImageWidth);
-
-                mMatrix.setScale(mBaseScale, mBaseScale);
-                mMatrix.mapRect(mImageArea);
-
-                Utils.center(mImageArea, drawingRect);
+                mBaseScale = Utils.range(mBaseScale, mMinimumScale, mMaximumScale);
+                if (mNeedReset) mTempScale = mBaseScale;
+                mMatrix.setScale(mTempScale, mTempScale);
+                mMatrix.mapRect(imageArea);
+                Utils.center(imageArea, drawingRect);
                 break;
+
             case FIT_AUTO:
                 mBaseScale = 1f * drawingRect.width() / mImage.mImageWidth;
-
-                mMatrix.setScale(mBaseScale, mBaseScale);
-                mMatrix.mapRect(mImageArea);
-
-                Utils.centerHorizontal(mImageArea, drawingRect);
+                mBaseScale = Utils.range(mBaseScale, mMinimumScale, mMaximumScale);
+                if (mNeedReset) mTempScale = mBaseScale;
+                mMatrix.setScale(mTempScale, mTempScale);
+                mMatrix.mapRect(imageArea);
+                Utils.centerHorizontal(imageArea, drawingRect);
                 if (mIsVertical) {
-                    mImageArea.offsetTo(mImageArea.left, drawingRect.top);
+                    imageArea.offsetTo(imageArea.left, drawingRect.top);
                 } else {
-                    Utils.centerVertical(mImageArea, drawingRect);
+                    Utils.centerVertical(imageArea, drawingRect);
                 }
                 break;
+
+            case CENTER:
+                mBaseScale = mIsVertical ? (1f * drawingRect.width() / mImage.mImageWidth)
+                        : (1f * drawingRect.height() / mImage.mImageHeight);
+
+                mBaseScale = Utils.range(mBaseScale, mMinimumScale, mMaximumScale);
+                if (mNeedReset) mTempScale = mBaseScale;
+                mMatrix.setScale(mTempScale, mTempScale);
+                mMatrix.mapRect(imageArea);
+                Utils.center(imageArea, drawingRect);
+                break;
+
+            case CENTER_INSIDE:
+                mBaseScale = Math.min(mIsVertical ? (1f * drawingRect.height() / mImage.mImageHeight)
+                        : (1f * drawingRect.width() / mImage.mImageWidth), 1f);
+                mBaseScale = Utils.range(mBaseScale, mMinimumScale, mMaximumScale);
+                if (mNeedReset) mTempScale = mBaseScale;
+                mMatrix.setScale(mTempScale, mTempScale);
+                mMatrix.mapRect(imageArea);
+                Utils.center(imageArea, drawingRect);
+                break;
         }
+        Logger.d(TAG, "DrawingRect=" + drawingRect + "/ImageArea=" + imageArea);
+        if (!mAnimateScaleType || mImageArea.isEmpty() || mImageArea.equals(imageArea)) {
+            mImageArea.set(imageArea);
+        } else {
+            zoomTo(imageArea);
+        }
+        mNeedReset = true;
         mState = State.FREE;
     }
 
@@ -199,7 +232,8 @@ class IntensifyImageDelegate {
     private void prepareDraw(Rect rect) {
         float curScale = getScale();
         int sampleSize = getSampleSize(1f / curScale);
-        mDrawables.clear();
+        Pair<RectF, Rect> newState = Pair.create(new RectF(mImageArea), new Rect(rect));
+
         if (mImage.mImageSampleSize > sampleSize) {
             RectF drawingRect = new RectF(rect);
 
@@ -207,41 +241,65 @@ class IntensifyImageDelegate {
                 drawingRect.offset(-mImageArea.left, -mImageArea.top);
             }
 
-            float blockSize = BLOCK_SIZE * curScale;
+            float blockSize = BLOCK_SIZE * curScale * sampleSize;
             Rect blocks = Utils.blocks(drawingRect, blockSize);
 
             List<ImageDrawable> drawables = new ArrayList<>();
             int roundLeft = Math.round(mImageArea.left);
             int roundTop = Math.round(mImageArea.top);
-            for (int i = blocks.top; i <= blocks.bottom; i++) {
-                for (int j = blocks.left; j <= blocks.right; j++) {
-                    Bitmap bitmap = null;
-                    IntensifyImageCache.ImageCache imageCache = mImage.mImageCaches.get(sampleSize);
-                    if (imageCache != null) bitmap = imageCache.get(new Point(j, i));
-                    if (bitmap == null) continue;
-                    Rect src = bitmapRect(bitmap);
-                    Rect dst = Utils.blockRect(j, i, blockSize, roundLeft, roundTop);
-                    if (src.bottom * sampleSize != BLOCK_SIZE || src.right * sampleSize != BLOCK_SIZE) {
-                        dst.set(src.left + dst.left, src.top + dst.top,
-                                Math.round(src.right * sampleSize * curScale) + dst.left,
-                                Math.round(src.bottom * sampleSize * curScale) + dst.top);
+            IntensifyImageCache.ImageCache imageCache = mImage.mImageCaches.get(sampleSize);
+            if (imageCache != null) {
+                for (int i = blocks.top; i <= blocks.bottom; i++) {
+                    for (int j = blocks.left; j <= blocks.right; j++) {
+                        Bitmap bitmap = imageCache.createGet(new Point(j, i));
+                        if (bitmap == null) continue;
+                        Rect src = bitmapRect(bitmap);
+                        Rect dst = Utils.blockRect(j, i, blockSize, roundLeft, roundTop);
+                        if (src.bottom * sampleSize != BLOCK_SIZE
+                                || src.right * sampleSize != BLOCK_SIZE) {
+
+                            dst.set(src.left + dst.left, src.top + dst.top,
+                                    Math.round(src.right * sampleSize * curScale) + dst.left,
+                                    Math.round(src.bottom * sampleSize * curScale) + dst.top);
+                        }
+                        drawables.add(new ImageDrawable(bitmap, src, dst));
                     }
-                    drawables.add(new ImageDrawable(bitmap, src, dst));
                 }
             }
 
-            mDrawables.addAll(drawables);
-        }
+            mDrawables.clear();
+            if (Utils.equals(newState, Pair.create(new RectF(mImageArea), new Rect(rect)))) {
+                mDrawables.addAll(drawables);
+            }
+        } else mDrawables.clear();
+
         mImage.mCurrentState = Pair.create(new RectF(mImageArea), new Rect(rect));
     }
 
     //@WorkerThread
     private void release() {
+        mZoomAnimator.cancel();
         if (mImage != null) {
             mImage.release();
             mImage = null;
         }
         mState = State.NONE;
+    }
+
+    /**
+     * 受限制于minimumScale和maximumScale
+     *
+     * @param scale 缩放值
+     */
+    public void setScale(float scale) {
+        if (scale < 0.0f) return;
+        mTempScale = scale;
+        mNeedReset = false;
+        if (mState.ordinal() > State.INIT.ordinal()) {
+            mState = State.INIT;
+            requestInvalidate();
+            requestAwakenScrollBars();
+        }
     }
 
     public float getScale() {
@@ -253,15 +311,10 @@ class IntensifyImageDelegate {
     }
 
     public float getNextStepScale(Rect drawingRect) {
-        if (Utils.isEmpty(drawingRect)) return mBaseScale;
+        if (Utils.isEmpty(drawingRect)) return mBaseScale / getScale();
 
-        float v;
-
-        if (mIsVertical) {
-            v = mImageArea.width() / drawingRect.width();
-        } else {
-            v = mImageArea.height() / drawingRect.height();
-        }
+        float v = mIsVertical ? mImageArea.width() / drawingRect.width() :
+                mImageArea.height() / drawingRect.height();
 
         // + 0.1 避免.99999型误差
         int index = Math.abs(Arrays.binarySearch(
@@ -274,11 +327,51 @@ class IntensifyImageDelegate {
     }
 
     /**
+     * 设置最小缩放值
+     *
+     * @param minimumScale 最小缩放值
+     */
+    public void setMinimumScale(float minimumScale) {
+        if (minimumScale <= mMaximumScale) {
+            mMinimumScale = minimumScale;
+            if (mState.ordinal() > State.INIT.ordinal()) {
+                mState = State.INIT;
+                requestInvalidate();
+                requestAwakenScrollBars();
+            }
+        }
+    }
+
+    /**
+     * 设置最大缩放值
+     *
+     * @param maximumScale 最大缩放值
+     */
+    public void setMaximumScale(float maximumScale) {
+        if (maximumScale >= mMinimumScale) {
+            mMaximumScale = maximumScale;
+            if (mState.ordinal() > State.INIT.ordinal()) {
+                mState = State.INIT;
+                requestInvalidate();
+                requestAwakenScrollBars();
+            }
+        }
+    }
+
+    public float getMinimumScale() {
+        return mMinimumScale;
+    }
+
+    public float getMaximumScale() {
+        return mMaximumScale;
+    }
+
+    /**
      * 请求图片归位
      */
     public void zoomHoming(Rect drawingRect) {
         if (Utils.contains(mImageArea, drawingRect)) return;
-        if (mZoomAnimator.isRunning()) mZoomAnimator.cancel();
+        mZoomAnimator.cancel();
         mStartRect.set(mImageArea);
         mEndRect.set(mImageArea);
         Utils.home(mEndRect, drawingRect);
@@ -294,12 +387,73 @@ class IntensifyImageDelegate {
         }
     }
 
+    /**
+     * 设置ScaleType动画过渡
+     *
+     * @param animate true 动画过渡，false 无过渡动画
+     */
+    public void setAnimateScaleType(boolean animate) {
+        mAnimateScaleType = animate;
+    }
+
+    public boolean isAnimateScaleType() {
+        return mAnimateScaleType;
+    }
+
+    /**
+     * 图像原始宽度
+     *
+     * @return 图像原始宽度
+     */
     public int getWidth() {
         return mImage != null ? mImage.mImageWidth : 0;
     }
 
+    /**
+     * 图像原始高度
+     *
+     * @return 图像原始高度
+     */
     public int getHeight() {
         return mImage != null ? mImage.mImageHeight : 0;
+    }
+
+    /**
+     * 图像宽度
+     *
+     * @return 图像宽度
+     */
+    public int getImageWidth() {
+        return Math.round(mImageArea.width());
+    }
+
+    /**
+     * 图像高度
+     *
+     * @return 图像高度
+     */
+    public int getImageHeight() {
+        return Math.round(mImageArea.height());
+    }
+
+    /**
+     * 返回显示区域相对图像区域的X坐标偏移
+     *
+     * @param scrollX 滚动X坐标
+     * @return 偏移值
+     */
+    public int getHorizontalOffset(int scrollX) {
+        return Math.round(scrollX - mImageArea.left);
+    }
+
+    /**
+     * 返回显示区域相对图像区域的Y坐标偏移
+     *
+     * @param scrollY 滚动Y坐标
+     * @return 偏移值
+     */
+    public int getVerticalOffset(int scrollY) {
+        return Math.round(scrollY - mImageArea.top);
     }
 
     public Point damping(Rect screen, float distanceX, float distanceY) {
@@ -341,13 +495,20 @@ class IntensifyImageDelegate {
     }
 
     public void scale(float scale, float focusX, float focusY) {
+        if (scale == 1.0f) return;
+        float curScale = getScale();
+        float preScale = curScale * scale;
+        if (!Utils.inRange(preScale, mMinimumScale, mMaximumScale)) {
+            scale = Utils.range(preScale, mMinimumScale, mMaximumScale) / curScale;
+        }
         mMatrix.setScale(scale, scale, focusX, focusY);
         mMatrix.mapRect(mImageArea);
+        requestScaleChange();
     }
 
     public void zoomScale(Rect drawingRect, float scale, float focusX, float focusY) {
-        if (Utils.isEmpty(drawingRect)) return;
-        if (mZoomAnimator.isRunning()) mZoomAnimator.cancel();
+        if (mState.ordinal() < State.FREE.ordinal() || Utils.isEmpty(drawingRect)) return;
+        mZoomAnimator.cancel();
         mStartRect.set(mImageArea);
 
         mMatrix.setScale(scale, scale, focusX, focusY);
@@ -357,34 +518,59 @@ class IntensifyImageDelegate {
         if (!Utils.contains(mImageArea, drawingRect)) {
             Utils.home(mEndRect, drawingRect);
         }
+        Logger.d(TAG, "Start=" + mStartRect + "/End=" + mEndRect);
+        mZoomAnimator.start();
+    }
+
+    public void zoomTo(RectF dst) {
+        mZoomAnimator.cancel();
+        mStartRect.set(mImageArea);
+        mEndRect.set(dst);
         mZoomAnimator.start();
     }
 
     private void requestInvalidate() {
-        if (mCallback != null) {
-            mCallback.onRequestInvalidate();
-        }
+        mCallback.onRequestInvalidate();
     }
 
-    public List<ImageDrawable> getImageDrawables(Rect drawingRect) {
+    private void requestAwakenScrollBars() {
+        mCallback.onRequestAwakenScrollBars();
+    }
+
+    private void requestScaleChange() {
+        mCallback.onScaleChange(getScale());
+    }
+
+    public List<ImageDrawable> obtainImageDrawables(Rect drawingRect) {
         if (Utils.isEmpty(drawingRect) || isNeedPrepare(drawingRect)) {
             return Collections.emptyList();
         }
 
+        ArrayList<ImageDrawable> drawables = obtainBaseDrawables();
+        drawables.addAll(mDrawables);
         if (!Utils.equals(mImage.mCurrentState, Pair.create(mImageArea, drawingRect))) {
             mHandler.removeMessages(MSG_IMAGE_DRAW);
             sendMessage(MSG_IMAGE_DRAW, drawingRect);
         }
 
-        ArrayList<ImageDrawable> drawables = new ArrayList<>(mDrawables);
-
-        drawables.add(0, new ImageDrawable(mImage.mImageCache,
-                bitmapRect(mImage.mImageCache), Utils.round(mImageArea)));
-
         return drawables;
     }
 
+    public ArrayList<ImageDrawable> obtainBaseDrawables() {
+        ArrayList<ImageDrawable> drawables = new ArrayList<>();
+        drawables.add(new ImageDrawable(mImage.mImageCache,
+                bitmapRect(mImage.mImageCache), Utils.round(mImageArea)));
+        return drawables;
+    }
+
+    /**
+     * 判断是否需要更新状态
+     *
+     * @param drawingRect 绘制区域
+     * @return true 需要准备
+     */
     public boolean isNeedPrepare(Rect drawingRect) {
+        mHandler.removeCallbacksAndMessages(null);
         switch (mState) {
             case NONE:
                 return true;
@@ -396,21 +582,21 @@ class IntensifyImageDelegate {
                 return true;
             case INIT:
                 sendMessage(MSG_IMAGE_SCALE, drawingRect);
-                return true;
+                return mImageArea.isEmpty();
         }
         return false;
     }
 
     private void sendMessage(int what) {
-        if (mHandler != null) {
-            mHandler.sendEmptyMessage(what);
-        }
+        mHandler.sendEmptyMessage(what);
     }
 
     private void sendMessage(int what, Object obj) {
-        if (mHandler != null) {
-            mHandler.obtainMessage(what, obj).sendToTarget();
-        }
+        mHandler.obtainMessage(what, obj).sendToTarget();
+    }
+
+    private void sendMessage(int what, int arg1, int arg2, Object obj) {
+        mHandler.obtainMessage(what, arg1, arg2, obj).sendToTarget();
     }
 
     public RectF getImageArea() {
@@ -436,7 +622,10 @@ class IntensifyImageDelegate {
         public void onAnimationUpdate(ValueAnimator animation) {
             Float value = (Float) animation.getAnimatedValue();
             Utils.evaluate(value, mStartRect, mEndRect, mImageArea);
+            requestScaleChange();
             requestInvalidate();
+            requestAwakenScrollBars();
+            Logger.d(TAG, "Anim Update.");
         }
     }
 
@@ -533,6 +722,10 @@ class IntensifyImageDelegate {
 
     public interface Callback {
         void onRequestInvalidate();
+
+        boolean onRequestAwakenScrollBars();
+
+        void onScaleChange(float scale);
     }
 
     private class IntensifyImageHandler extends Handler {
@@ -544,29 +737,36 @@ class IntensifyImageDelegate {
         @Override
         public void handleMessage(Message msg) {
             switch (msg.what) {
-                case MSG_IMAGE_SRC:
-                    prepare((ImageDecoder) msg.obj);
-                    requestInvalidate();
-                    break;
-                case MSG_IMAGE_LOAD:
-                    load();
-                    requestInvalidate();
-                    break;
-                case MSG_IMAGE_INIT:
-                    initialize((Rect) msg.obj);
-                    requestInvalidate();
-                    break;
-                case MSG_IMAGE_SCALE:
-                    initScaleType((Rect) msg.obj);
-                    requestInvalidate();
-                    break;
                 case MSG_IMAGE_DRAW:
                     prepareDraw((Rect) msg.obj);
                     requestInvalidate();
                     break;
+
+                case MSG_IMAGE_SCALE:
+                    initScaleType((Rect) msg.obj);
+                    requestInvalidate();
+                    requestAwakenScrollBars();
+                    break;
+
+                case MSG_IMAGE_SRC:
+                    prepare((ImageDecoder) msg.obj);
+                    requestInvalidate();
+                    break;
+
+                case MSG_IMAGE_LOAD:
+                    load();
+                    requestInvalidate();
+                    break;
+
+                case MSG_IMAGE_INIT:
+                    initialize((Rect) msg.obj);
+                    requestInvalidate();
+                    break;
+
                 case MSG_IMAGE_RELEASE:
                     release();
                     break;
+
                 case MSG_QUIT:
                     release();
                     try {

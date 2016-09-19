@@ -4,6 +4,7 @@
     <string name="multi_images">多图</string>
     <string name="choose_pictures">选择图片</string>
     <string name="take_photo">拍照</string>
-    <string name="scaletype">ScaleType</string>
+    <string name="scale_type">ScaleType</string>
     <string name="background">背景</string>
+    <string name="scale_value">缩放</string>
 </resources>

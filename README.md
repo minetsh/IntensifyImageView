@@ -16,7 +16,7 @@ Use Gradle:
 
 ``` groovy
 dependencies {
-   compile 'me.kareluo.intensify:image:1.0.0'
+   compile 'me.kareluo.intensify:image:1.1.0'
 }
 ```
 
@@ -26,7 +26,7 @@ Or Maven:
 <dependency>
   <groupId>me.kareluo.intensify</groupId>
   <artifactId>image</artifactId>
-  <version>1.0.0</version>
+  <version>1.1.0</version>
   <type>pom</type>
 </dependency>
 ```
@@ -61,6 +61,20 @@ imageView.setImage(String path);
 # Blog
 大图预览的主要原理是通过`BitmapRegionDecoder`对图片进行分块加载实现的，并在内存中维护不同精度，不同区域的Bitmap对象的加载与回收，详细内容可参考此篇博客：[Android 原图预览](http://kareluo.github.io/2015/12/27/Android-Picture-Preview/)
 
+# Update Logs
+
+#### v1.0.0
+- 图片分块加载
+- 支持多图切换
+- 双击缩放及手势缩放
+- 移动、快速滑动、回弹、居中等
+
+#### v1.1.0 
+- 支持`ScrollBar`
+- 添加`CENTER`和`CENTER_INSIDE`
+- 优化缩放抖动问题
+- 添加ScaleType切换动画
+
 # License
 
 ``` license
@@ -78,4 +92,5 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ```
+
 
